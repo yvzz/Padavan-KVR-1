@@ -1,9 +1,12 @@
-﻿#!/bin/sh
-#from aaron
+#!/bin/sh
+# npc_script_v2
+# 生成 npc 配置并启动. 二进制由 /usr/bin/npc.sh 按需下载到 /tmp/npc/npc,
+# (老版本固件里此处是 /usr/bin/npc, 已随"不编译进固件"一起改掉)
 killall npc
 mkdir -p /tmp/npc
 tmpconf="/tmp/npc/npc.conf"
 LOGFILE="/tmp/npc.log"
+npc_bin="/tmp/npc/npc"
 
 if [ -f $tmpconf ] ; then 
 	rm $tmpconf
@@ -37,23 +40,12 @@ else
 fi
 
 if [ "$npc_enable" = "1" ] ; then
-	npc_bin="/usr/bin/npc"
-	if [ ! -f "$npc_bin" ]; then
-		if [ ! -f "/tmp/npc/npc" ];then
-			wget -c -P /tmp/npc https://github.com/etion2008/aaron/raw/main/npc/npc
-			if [ ! -f "/tmp/npc/npc" ]; then
-				logger -t "NPC" "npc二进制文件下载失败，可能是地址失效或者网络异常！"
-				nvram set npc_enable=0
-				npc_close
-			else
-				logger -t "NPC" "npc二进制文件下载成功"
-				chmod -R 777 /tmp/npc/npc
-				npc_bin="/tmp/npc/npc"
-			fi
-		else
-			npc_bin="/tmp/npc/npc"
-		fi
+	if [ ! -s "$npc_bin" ]; then
+		logger -t "NPC" "npc 二进制文件不存在: $npc_bin (等待 npc.sh 下载)"
+	else
+		chmod 755 "$npc_bin"
+		cd /tmp/npc
+		"$npc_bin" -config=$tmpconf -log_level=$Log_level -log_path=$LOGFILE -debug=false >/dev/null 2>&1 &
+		logger -t "NPC" "npc 已启动, 服务器 $server_addr:$server_port"
 	fi
-
-	$npc_bin -config=$tmpconf -log_level=$Log_level -log_path=$LOGFILE -debug=false 2>&1 &
 fi
