@@ -419,8 +419,8 @@ jobs:
          ## KMS服务器 已删除 /trunk/user/httpd/common.h
         echo "CONFIG_FIRMWARE_INCLUDE_VLMCSD=n" >> .config
 
-         ## TTYD 已删除
-        echo "CONFIG_FIRMWARE_INCLUDE_TTYD=n" >> .config
+         ## TTYD 网页终端
+        echo "CONFIG_FIRMWARE_INCLUDE_TTYD=y" >> .config
 
          ## 文件传输工具
         echo "CONFIG_FIRMWARE_INCLUDE_LRZSZ=y" >> .config

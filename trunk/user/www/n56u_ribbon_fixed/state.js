@@ -228,6 +228,8 @@ var enabledGuest2Gclass = '<% nvram_match_x("","rt_guest_enable", "1", "btn-info
 var enabledGuest5Gclass = '<% nvram_match_x("","wl_guest_enable", "1", "btn-info"); %>';
 var enabledBtnCommit = '<% nvram_match_x("","nvram_manual", "0", "display:none;"); %>';
 var enabledBtnttyd = '<% nvram_match_x("","ttyd_enable", "0", "display:none;"); %>';
+// 未编译 ttyd 时不显示该按钮(否则 nvram 变量未注册, 按钮会一直显示且点了打不开终端)
+if (!found_app_ttyd()) enabledBtnttyd = 'display:none;';
 
 // L3 = The third Level of Menu
 function show_banner(L3){
