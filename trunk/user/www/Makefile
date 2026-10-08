@@ -213,6 +213,14 @@ endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIDDNS),y)
 	rm -f $(INSTALLDIR)/www/Advanced_aliddns.asp
 endif
+# DDNS 服务(阿里DDNS/DNSPod/Cloudflare 三页签合并页): 三者都没开时才删
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIDDNS),y)
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_DDNSPOD),y)
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_CLOUDFLARE),y)
+	rm -f $(INSTALLDIR)/www/Advanced_ddns.asp
+endif
+endif
+endif
 
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_DDNSPOD),y)
 	rm -f $(INSTALLDIR)/www/Advanced_ddnspod.asp

@@ -527,15 +527,13 @@ if (found_app_smartdns()){
 	adg_array = new Array("","Advanced_adguardhome.asp");
 	tablink[15] = (adg_array);
 }
-if (found_app_aliddns()){
-	aliddns_array = new Array("","Advanced_aliddns.asp");
-	tablink[16] = (aliddns_array);
+/* DDNS 服务: 阿里DDNS / DNSPod / Cloudflare 合并为同一页面的三个页签 */
+if (found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare()){
+	ddns_array = new Array("","Advanced_ddns.asp");
+	tablink[16] = (ddns_array);
 }else if (found_app_ddnsto()){
 	ddnsto_array = new Array("","Advanced_ddnsto.asp");
 	tablink[16] = (ddnsto_array);
-}else if (found_app_zerotier()){
-	zerotier_array = new Array("","Advanced_zerotier.asp");
-	tablink[16] = (zerotier_array);
 }else if (found_app_wireguard()){
 	wireguard_array = new Array("","Advanced_wireguard.asp");
 	tablink[16] = (wireguard_array);
@@ -592,10 +590,6 @@ if (found_app_alist()){
 	alist_array = new Array("","Advanced_alist.asp");
 	tablink[29] = (alist_array);
 }
-if (found_app_cloudflare()){
-	cloudflare_array = new Array("","Advanced_cloudflare.asp");
-	tablink[30] = (cloudflare_array);
-}
 if (found_app_easytier()){
 	easytier_array = new Array("","Advanced_easytier.asp");
 	tablink[31] = (easytier_array);
@@ -615,10 +609,6 @@ if (found_app_v2raya()){
 if (found_app_npc()){
 	npc_array = new Array("","Advanced_npc.asp");
 	tablink[35] = (npc_array);
-}
-if (found_app_ddnspod()){
-	ddnspod_array = new Array("","Advanced_ddnspod.asp");
-	tablink[36] = (ddnspod_array);
 }
 
 //Level 2 Menu
@@ -652,11 +642,9 @@ if (found_app_smartdns()){
 	menuL2_title.push("<#menu5_29#>");
 } else menuL2_title.push("");
 
-if (found_app_aliddns()){
-	menuL2_title.push("<#menu5_30#>");
+if (found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare()){
+	menuL2_title.push("DDNS服务");
 } else if (found_app_ddnsto()){
-	menuL2_title.push("<#menu5_30#>");
-} else if (found_app_zerotier()){
 	menuL2_title.push("<#menu5_30#>");
 } else if (found_app_wireguard()){
 	menuL2_title.push("<#menu5_30#>");
@@ -714,10 +702,6 @@ if (found_app_alist()){
 	menuL2_title.push("Alist");
 } else menuL2_title.push("");
 
-if (found_app_cloudflare()){
-	menuL2_title.push("CF域名解析");
-} else menuL2_title.push("");
-
 if (found_app_easytier()){
 	menuL2_title.push("EasyTier");
 } else menuL2_title.push("");
@@ -736,10 +720,6 @@ if (found_app_v2raya()){
 
 if (found_app_npc()){
 	menuL2_title.push("NPC内网穿透");
-} else menuL2_title.push("");
-
-if (found_app_ddnspod()){
-	menuL2_title.push("<#menu5_23_2#>");
 } else menuL2_title.push("");
 
 menuL2_link  = new Array("", tablink[0][1], tablink[1][1], tablink[2][1], tablink[3][1], tablink[4][1], tablink[5][1], tablink[6][1], tablink[7][1], support_2g_radio() ? tablink[8][1] : "Main_EStatus_Content.asp", tablink[9][1]);
@@ -768,12 +748,10 @@ if (found_app_smartdns()){
 } else if (found_app_adguardhome()){
 	menuL2_link.push(adg_array[1]);
 } else menuL2_link.push("");
-if (found_app_aliddns()){
-	menuL2_link.push(aliddns_array[1]);
+if (found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare()){
+	menuL2_link.push(ddns_array[1]);
 } else if (found_app_ddnsto()){
 	menuL2_link.push(ddnsto_array[1]);
-} else if (found_app_zerotier()){
-	menuL2_link.push(zerotier_array[1]);
 } else if (found_app_wireguard()){
 	menuL2_link.push(wireguard_array[1]);
 } else menuL2_link.push("");
@@ -816,9 +794,6 @@ if (found_app_tailscale()){
 if (found_app_alist()){
 	menuL2_link.push(alist_array[1]);
 } else menuL2_link.push("");
-if (found_app_cloudflare()){
-	menuL2_link.push(cloudflare_array[1]);
-} else menuL2_link.push("");
 if (found_app_easytier()){
 	menuL2_link.push(easytier_array[1]);
 } else menuL2_link.push("");
@@ -834,10 +809,6 @@ if (found_app_v2raya()){
 
 if (found_app_npc()){
 	menuL2_link.push(npc_array[1]);
-} else menuL2_link.push("");
-
-if (found_app_ddnspod()){
-	menuL2_link.push(ddnspod_array[1]);
 } else menuL2_link.push("");
 
 //Level 1 Menu in Gateway, Router mode
