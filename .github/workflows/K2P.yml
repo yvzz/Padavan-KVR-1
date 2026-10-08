@@ -3,6 +3,9 @@ name: 原版K2P
 
 on: 
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 #设置仓库的读写权限
 permissions:
