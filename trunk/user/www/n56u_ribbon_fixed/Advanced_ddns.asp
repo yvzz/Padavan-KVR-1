@@ -36,6 +36,14 @@ $j(document).ready(function() {
 		return false;
 	});
 
+	/* 未编译进本固件的服务, 隐藏对应页签 */
+	if (!found_app_aliddns())
+		$j('#tab_ddns_aliddns').parents('li').hide();
+	if (!found_app_ddnspod())
+		$j('#tab_ddns_ddnspod').parents('li').hide();
+	if (!found_app_cloudflare())
+		$j('#tab_ddns_cf').parents('li').hide();
+
 	/* 进入页面时按 URL hash 定位到对应页签(如 #ddnspod) */
 	showTab(window.location.hash);
 
@@ -64,10 +72,20 @@ function textarea_scripts_enabled(v){
 }
 
 var arrHashes = ["aliddns","ddnspod","cf"];
+
+/* 第一个未被隐藏(即已编译进固件)的页签, 作为默认/回退页签 */
+function firstVisibleTab(){
+	for (var i = 0; i < arrHashes.length; i++) {
+		if ($j('#tab_ddns_' + arrHashes[i]).parents('li').css('display') != 'none')
+			return '#' + arrHashes[i];
+	}
+	return '#aliddns';
+}
+
 function showTab(curHash) {
 	var obj = $('tab_ddns_' + curHash.slice(1));
-	if (obj == null || obj.style.display == 'none')
-		curHash = '#aliddns';
+	if (obj == null || $j(obj).parents('li').css('display') == 'none')
+		curHash = firstVisibleTab();
 	for (var i = 0; i < arrHashes.length; i++) {
 		if (curHash == ('#' + arrHashes[i])) {
 			$j('#tab_ddns_' + arrHashes[i]).parents('li').addClass('active');
