@@ -1,0 +1,150 @@
+name: Delete Old Release
+
+on:
+  # push:
+  #   branches: [ main, master ]
+  schedule:
+    - cron: 0 16 * * 1     # 每周一 00:00 北京时间（UTC+8）＝ UTC 周日 16:00
+  workflow_dispatch:
+    inputs:
+
+      # ─── 清理对象 ───
+      do_tags:
+        description: '清理孤立 Tag（无关联 Release 的 Tag）'
+        required: false
+        type: boolean
+        default: true
+
+      do_releases:
+        description: '清理旧 Release（按数量保留最新的 N 个）'
+        required: false
+        type: boolean
+        default: false
+
+      keep_releases:
+        description: '保留最新 Release 的数量（0 = 全部删除）'
+        required: false
+        type: number
+        default: 5
+
+
+# ──────────────────────────────────────────────
+jobs:
+
+  # ════════════════════════════════════════════
+  #  清理孤立 Tag
+  # ════════════════════════════════════════════
+  delete-tags:
+    name: Delete Orphan Tags
+    needs: delete-releases
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # 在 delete-releases 完成后执行：release 被删后其 tag 才变"孤立"，再清理才彻底
+    # 兼容 delete-releases 被 skipped 的场景（未勾选 do_releases / 手动默认）
+    if: ${{ (inputs.do_tags || github.event_name == 'schedule') && (needs.delete-releases.result == 'success' || needs.delete-releases.result == 'skipped' || needs.delete-releases.result == 'failure') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete orphan tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO=${{ github.repository }}
+          echo "获取所有 Remote Tag..."
+          remote_tags=$(gh api "repos/$REPO/git/matching-refs/tags" --paginate --jq '.[].ref' 2>/dev/null)
+
+          if [ -z "$remote_tags" ]; then
+            echo "没有 Tag"
+            exit 0
+          fi
+
+          deleted=0
+          for ref in $remote_tags; do
+            tag=$(echo "$ref" | sed 's|^refs/tags/||')
+            release=$(gh release view "$tag" --json tagName --jq '.tagName' 2>/dev/null || true)
+            if [ -z "$release" ]; then
+              echo "  删除孤立 Tag: $tag"
+              if gh api --method DELETE "repos/$REPO/git/refs/tags/$tag" \
+                   --silent 2>/tmp/padavan_delete_err.log; then
+                deleted=$((deleted + 1))
+                echo "    ✓ 已删除"
+              else
+                echo "    ⚠ 删除失败: $(cat /tmp/padavan_delete_err.log)"
+              fi
+            else
+              echo "  保留 (有 Release): $tag"
+            fi
+          done
+
+          echo ""
+          echo "完成: 删除 ${deleted} 个孤立 Tag"
+
+  # ════════════════════════════════════════════
+  #  清理旧 Release
+  # ════════════════════════════════════════════
+  delete-releases:
+    name: Delete Old Releases
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # 勾选 do_releases 时运行；定时触发也运行
+    if: ${{ inputs.do_releases || github.event_name == 'schedule' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Delete old releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KEEP="${{ inputs.keep_releases || '5' }}"
+
+          # 本项目 tag 格式为 date '+%Y-%m-%d'，即 YYYY-MM-DD
+          # 只处理符合该格式的 tag，其余(手动打的固定 tag 等)永不删除
+          echo "按发布日期倒序，保留最新 ${KEEP} 个 Release"
+
+          if [ "$KEEP" -eq 0 ]; then
+            echo "Mode: delete ALL date-tagged releases (keep=0)" >&2
+          fi
+
+          releases=$(gh release list \
+            --exclude-drafts \
+            --limit 200 \
+            --json tagName,publishedAt \
+            --jq '.[] | "\(.publishedAt)|\(.tagName)"')
+
+          if [ -z "$releases" ]; then
+            echo "没有 Release"
+            exit 0
+          fi
+
+          deleted=0
+          kept=0
+
+          # 用 here-string 而非管道，避免 while 循环在子 shell 中导致计数丢失
+          while IFS='|' read -r published tag; do
+            [ -z "$tag" ] && continue
+            if [[ "$tag" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              # kept + deleted 即当前已处理过的日期 tag 数量
+              if [ $((kept + deleted)) -lt "$KEEP" ]; then
+                echo "  保留(最新 $KEEP 个内): $tag (发布于 ${published%%T*})"
+                kept=$((kept + 1))
+              else
+                echo "  删除: $tag (发布于 ${published%%T*})"
+                if gh release delete "$tag" --yes --cleanup-tag --repo ${{ github.repository }}; then
+                  deleted=$((deleted + 1))
+                else
+                  echo "    ⚠ 删除失败"
+                fi
+              fi
+            else
+              echo "  保留(非日期 tag): $tag"
+            fi
+          done <<< "$releases"
+
+          echo ""
+          echo "完成: 删除 ${deleted} 个, 保留 ${kept} 个"

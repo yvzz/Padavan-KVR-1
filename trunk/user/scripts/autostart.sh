@@ -86,6 +86,11 @@ logger -t "自动启动" "正在启动阿里ddns"
 /usr/bin/aliddns.sh start &
 fi
 
+if [ $(nvram get ddnspod_enable) = 1 ] ; then
+logger -t "自动启动" "正在启动DNSPod DDNS"
+/usr/bin/ddnspod.sh start
+fi
+
 if [ $(nvram get cloudflare_enable) = 1 ] ; then
 logger -t "自动启动" "正在启动CF-ddns"
 /usr/bin/cloudflare.sh start &

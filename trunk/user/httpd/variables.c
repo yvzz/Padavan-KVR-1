@@ -776,6 +776,18 @@
 			{"aliddns_domain6", "", NULL, EVM_RESTART_ALIDDNS },
 			{"scripts.ddns_script.sh", "File", NULL, EVM_RESTART_ALIDDNS},
 #endif
+#if defined(APP_DDNSPOD)
+			{"ddnspod_enable", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_interval", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_token", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_name", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_name2", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_name6", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_domain", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_domain2", "", NULL, EVM_RESTART_DDNSPOD },
+			{"ddnspod_domain6", "", NULL, EVM_RESTART_DDNSPOD },
+			{"scripts.ddnspod_script.sh", "File", NULL, EVM_RESTART_DDNSPOD},
+#endif
 			{"ManualDHCPList", "Group", ARGV((char*)variables_LANHostConfig_ManualDHCPList, "8", "55", "dhcp_staticnum_x"), EVM_RESTART_DHCPD},
 			{"VPNSACLList", "Group", ARGV((char*)variables_LANHostConfig_VPNSACLList, "8", "107", "vpns_num_x"), EVM_RESTART_VPNSVR},
 			{0,0,0,0}
@@ -1049,7 +1061,7 @@
 	};
 #endif
 
-/*#if defined(APP_NPC)
+#if defined(APP_NPC)
 	struct variable variables_NpcConf[] = {
 			{"npc_enable", "", NULL, EVM_RESTART_NPC},
 			{"npc_server_addr", "", NULL, EVM_RESTART_NPC},
@@ -1062,7 +1074,7 @@
 			{"scripts.npc_script.sh", "File", NULL, EVM_RESTART_NPC},
 			{0,0,0,0}
 	};
-#endif*/
+#endif
 
 #if defined(APP_CADDY)
 	struct variable variables_CaddyConf[] = {
@@ -1716,9 +1728,9 @@
 #if defined(APP_FRP)
 		{"FrpConf",		variables_FrpConf},
 #endif
-/*#if defined(APP_NPC)
+#if defined(APP_NPC)
 		{"NpcConf",		variables_NpcConf},
-#endif*/
+#endif
 #if defined(APP_SCUT)
 		{"ScutclientConf",		variables_ScutclientConf},
 #endif
@@ -1920,9 +1932,12 @@
 #if defined(APP_ALIDDNS)
 		{EVM_RESTART_ALIDDNS,		EVT_RESTART_ALIDDNS,		RCN_RESTART_ALIDDNS,	0},
 #endif
-/*#if defined(APP_NPC)
+#if defined(APP_DDNSPOD)
+		{EVM_RESTART_DDNSPOD,		EVT_RESTART_DDNSPOD,		RCN_RESTART_DDNSPOD,	0},
+#endif
+#if defined(APP_NPC)
 		{EVM_RESTART_NPC,		EVT_RESTART_NPC,		RCN_RESTART_NPC,	0},
-#endif*/
+#endif
 #if defined(APP_SMBD) || defined(APP_NMBD)
 		{EVM_RESTART_NMBD,		EVT_RESTART_NMBD,		RCN_RESTART_NMBD,	0},
 #endif

@@ -1,8 +1,13 @@
-name: MI-R3P-breed版
+
+name: MI-R2100
 
 on: 
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
+#设置仓库的读写权限
 permissions:
   contents: write
 env:
@@ -35,15 +40,75 @@ jobs:
         cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
         mkdir -p /opt/images/
-        
-        ##### 修改内存空间和 storage空间9m
-        sed -i 's/SIZ=0x0400000/SIZ=0x0900000/g' /opt/rt-n56u/trunk/configs/boards/MI-R3P/kernel-3.4.x-breed.config
-        sed -i 's/size_etc="6M"/size_etc="9M"/g' /opt/rt-n56u/trunk/user/scripts/dev_init.sh
-        sed -i 's/size_tmp="24M"/size_tmp="120M"/g' /opt/rt-n56u/trunk/user/scripts/dev_init.sh
-        sed -i 's/mtd_part_size=65536/mtd_part_size=9437184/g' /opt/rt-n56u/trunk/user/scripts/mtd_storage.sh
+
+        # 修复 ncurses-6.4.patch：GitHub mirror 的 ncurses 6.4 源码已把 shell 变量赋值加了双引号
+        # 旧 patch 上下文为无引号版本 → Hunk #1 FAILED at 43 → 整个 libs 编译失败
+        # 兜底重写为带双引号版本（与仓库内已修复的 patch 内容一致，双保险）
+        cat > /opt/rt-n56u/trunk/libs/libncurses/ncurses-6.4.patch <<'PATCH_EOF'
+        diff -rupw ncurses-6.4-orig/misc/run_tic.in ncurses-6.4/misc/run_tic.in
+        --- ncurses-6.4-orig/misc/run_tic.in	2020-02-12 17:50:22.000000000 +0800
+        +++ ncurses-6.4/misc/run_tic.in	2020-12-30 10:26:00.107716122 +0800
+        @@ -43,7 +43,7 @@ echo "** Building terminfo database, ple
+         #	make install.data
+
+         : "${suffix:=@EXEEXT@}"
+        -: "${DESTDIR:=@DESTDIR@}"
+        +#: "${DESTDIR:=@DESTDIR@}"
+         : "${prefix:=@prefix@}"
+         : "${exec_prefix:=@exec_prefix@}"
+         : "${bindir:=@bindir@}"
+        PATCH_EOF
+
+        # 修复 libssl/libcurl Makefile：恢复 extract_test 依赖
+        # all: config_test 跳过了解压，导致 cd openssl-1.1.1t / cd curl-8.5.0 失败
+        # 根因：Makefile 把 all 改成只依赖 config_test，跳过 download_test + extract_test
+        # libssl/libcurl 的源码包已在仓库内，download_test 因文件已存在会跳过，extract_test 负责解压
+        sed -i 's/^all: config_test/all: download_test extract_test config_test/' \
+          /opt/rt-n56u/trunk/libs/libssl/Makefile \
+          /opt/rt-n56u/trunk/libs/libcurl/Makefile
+
+        # 修复 toolchain sysroot 的 sys/random.h 缺少 #include <stddef.h>
+        # 根因: toolchain-mipsel v1.1 预编译 sysroot 的 sys/random.h 第 27 行用 size_t
+        # 但没 include <stddef.h>，编译 OPENSSH getrandom.o 时报 unknown type name 'size_t'
+        # 仓库源码版 libc/uClibc-ng-1.0.38/.../sys/random.h 第 8 行有 #include <stddef.h>
+        SYSROOT_INC=/opt/rt-n56u/toolchain-mipsel/toolchain-3.4.x/mipsel-linux-uclibc/sysroot/usr/include
+        if [ -f "$SYSROOT_INC/sys/random.h" ] && ! grep -q "stddef.h" "$SYSROOT_INC/sys/random.h"; then
+          sed -i '/#include <features.h>/a #include <stddef.h>' "$SYSROOT_INC/sys/random.h"
+        fi
+
+        # 修复 openssh Makefile：恢复 extract_test 依赖（同 libssl/libcurl 潜伏 bug）
+        # all: config_test 跳过 extract_test -> 若 openssh-9.0p1 目录不存在 -> cd 失败
+        # -> autoreconf 在父目录运行 -> 找不到 configure.ac -> ./configure: not found
+        sed -i 's/^all: config_test/all: download_test extract_test config_test/' \
+          /opt/rt-n56u/trunk/user/openssh/Makefile
+
+        # 修复 openvpn Makefile（run #14 真实日志暴露的同类 bug）：
+        # 1) all: config_test 跳过 extract_test -> openvpn-2.5.9 目录未解压 -> cd 失败
+        # 2) extract_test 里 tar -xf ...tar.xz 但源码包是 .tar.gz（扩展名+解压参数都错）
+        sed -i 's/^all: config_test/all: extract_test config_test/' \
+          /opt/rt-n56u/trunk/user/openvpn/Makefile
+        sed -i 's/tar -xf \$(SRC_NAME)\.tar\.xz/tar -zxf $(SRC_NAME).tar.gz/' \
+          /opt/rt-n56u/trunk/user/openvpn/Makefile
+
+        # 诊断 + 兜底：确保 openssh-9.0p1 目录存在且含 configure.ac
+        # 根因待查：git clone --depth=1 后 openssh-9.0p1/ 目录可能不存在（820 个文件应被 checkout）
+        # 兜底：如果目录不存在或缺 configure.ac，从仓库内的 openssh-9.0p1.tar.gz 解压
+        OPENSSH_DIR=/opt/rt-n56u/trunk/user/openssh/openssh-9.0p1
+        if [ ! -f "$OPENSSH_DIR/configure.ac" ]; then
+          echo "::warning::openssh-9.0p1/configure.ac 不存在，从 tar.gz 解压"
+          rm -rf "$OPENSSH_DIR"
+          tar xzf /opt/rt-n56u/trunk/user/openssh/openssh-9.0p1.tar.gz -C /opt/rt-n56u/trunk/user/openssh/
+          ls -la "$OPENSSH_DIR/configure.ac" 2>&1 || echo "::error::解压后仍无 configure.ac"
+        fi
+
+        ##### 修改内存空间和 storage空间13m
+        sed -i 's/SIZ=0x0400000/SIZ=0x0d00000/g' /opt/rt-n56u/trunk/configs/boards/R2100/kernel-3.4.x-5.0.config
+        sed -i 's/size_etc="6M"/size_etc="13M"/g' /opt/rt-n56u/trunk/user/scripts/dev_init.sh
+        sed -i 's/size_tmp="24M"/size_tmp="30M"/g' /opt/rt-n56u/trunk/user/scripts/dev_init.sh
+        sed -i 's/mtd_part_size=65536/mtd_part_size=13631488/g' /opt/rt-n56u/trunk/user/scripts/mtd_storage.sh
     - name: Build Firmware
       env:
-        TNAME: MI-R3P-breed
+        TNAME: R2100
         KERNEL: 3.4
       run: |
         cd /opt/rt-n56u/trunk
@@ -55,7 +120,6 @@ jobs:
         sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/g' .config
         ################################################################################################
         ###  清除默认配置###
-        #sed -i '/CONFIG_TOOLCHAIN_DIR/d' .config
         sed -i '/CONFIG_FIRMWARE_ENABLE_IPV6/d' .config
         sed -i '/CONFIG_FIRMWARE_ENABLE_USB/d' .config
         sed -i '/CONFIG_FIRMWARE_ENABLE_UFSD/d' .config
@@ -143,13 +207,14 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_WIREGUARD/d' .config   
         sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
+        sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSPOD/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_V2RAY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_XRAY/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_TROJAN/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SSOBFS/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_NPC/d' .config
-        sed -i '/CONFIG_FIRMWARE_WEBUI_HIDE_VPN/d' .config
+sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSPOD/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_OPENVPN/d' .config
         # 清除默认配置结束
         ######################################################################
@@ -160,22 +225,22 @@ jobs:
         echo "CONFIG_FIRMWARE_ENABLE_IPV6=y" >> .config
         
         #启用 USB 支持
-        echo "CONFIG_FIRMWARE_ENABLE_USB=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_USB=n" >> .config
         
         #通过 Paragon 的 "ufsd" 驱动启用 NTFS 文件系统支持。约 0.4MB
-        echo "CONFIG_FIRMWARE_ENABLE_UFSD=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_UFSD=n" >> .config
         
         #启用 FAT/FAT32 文件系统支持。约 0.1MB
-        echo "CONFIG_FIRMWARE_ENABLE_FAT=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_FAT=n" >> .config
         
         #启用 exFAT（同时支持 FAT/FAT32）文件系统支持。约 0.12MB
-        echo "CONFIG_FIRMWARE_ENABLE_EXFAT=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_EXFAT=n" >> .config
         
         #启用 EXT2 文件系统支持。约 0.1MB
-        echo "CONFIG_FIRMWARE_ENABLE_EXT2=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_EXT2=n" >> .config
         
         #启用 EXT3 文件系统支持。约 0.2MB
-        echo "CONFIG_FIRMWARE_ENABLE_EXT3=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_EXT3=n" >> .config
         
         #启用 EXT4（同时支持 EXT3/EXT2）文件系统支持。约 0.4MB
         echo "CONFIG_FIRMWARE_ENABLE_EXT4=y" >> .config
@@ -184,7 +249,7 @@ jobs:
         echo "CONFIG_FIRMWARE_ENABLE_XFS=n" >> .config 
 
         ##启用 FUSE（用户空间文件系统）支持。约 0.1MB
-        echo "CONFIG_FIRMWARE_ENABLE_FUSE=y" >> .config
+        echo "CONFIG_FIRMWARE_ENABLE_FUSE=n" >> .config
 
         ##启用交换文件/分区支持。约 0.05MB
         echo "CONFIG_FIRMWARE_ENABLE_SWAP=y" >> .config
@@ -193,10 +258,10 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_UVC=n" >> .config
 
         ##包含 USB-HID 模块。约 0.2MB
-        echo "CONFIG_FIRMWARE_INCLUDE_HID=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_HID=n" >> .config
 
         ##包含 USB-Serial 模块（例如 pl2303）。约 0.03MB
-        echo "CONFIG_FIRMWARE_INCLUDE_SERIAL=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_SERIAL=n" >> .config
 
         ##包含 USB-Audio 模块。约 0.46MB
         echo "CONFIG_FIRMWARE_INCLUDE_AUDIO=n" >> .config
@@ -220,16 +285,16 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_NFSD=n" >> .config
 
         ## 包含 CIFS（SMB）客户端。约 0.2MB
-        echo "CONFIG_FIRMWARE_INCLUDE_CIFS=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_CIFS=n" >> .config
 
         ##包含 NTFS-3G FUSE 驱动（替代 Paragon 的 "ufsd" 驱动）。约 0.4MB
         echo "CONFIG_FIRMWARE_INCLUDE_NTFS_3G=n" >> .config
 
         ##包含 LPR 打印机守护程序。约 0.12MB
-        echo "CONFIG_FIRMWARE_INCLUDE_LPRD=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_LPRD=n" >> .config
 
         ##包含 USB-over-Ethernet 打印机守护程序。约 0.05MB
-        echo "CONFIG_FIRMWARE_INCLUDE_U2EC=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_U2EC=n" >> .config
 
         ##包含 "tcpdump" 工具。约 0.6MB
         echo "CONFIG_FIRMWARE_INCLUDE_TCPDUMP=y" >> .config
@@ -241,16 +306,16 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_PARTED=y" >> .config
 
         ##包含 SMB（和 WINS）服务器。约 1.5MB
-        echo "CONFIG_FIRMWARE_INCLUDE_SMBD=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_SMBD=n" >> .config
 
         ##使用 samba3.6 替代 samba3
-        echo "CONFIG_FIRMWARE_INCLUDE_SMBD36=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_SMBD36=n" >> .config
 
         ##包含 SMB 和 WINS 服务器的日志功能。约 0.3MB
         echo "CONFIG_FIRMWARE_INCLUDE_SMBD_SYSLOG=n" >> .config
 
         ##包含 FTP 服务器。约 0.2MB
-        echo "CONFIG_FIRMWARE_INCLUDE_FTPD=y" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_FTPD=n" >> .config
 
         ##包含替代的 L2TP 控制客户端 RP-L2TP。约 0.1MB
         echo "CONFIG_FIRMWARE_INCLUDE_RPL2TP=n" >> .config
@@ -299,7 +364,7 @@ jobs:
 
 
 
-        ##包含 Transmission 种子下载工具。openssl 约 1.2MB，transmission 约 1.5MB 已删除 /trunk/user/httpd/common.h
+        ##包含 Transmission 种子下载工具。openssl 约 1.2MB，transmission 约 1.5MB 已删除 请查看/trunk/user/httpd/common.h
         echo "CONFIG_FIRMWARE_INCLUDE_TRANSMISSION=n" >> .config
 
         ##包含 Transmission-Web-Control（高级 WebUI）。约 0.8MB 已删除 /trunk/user/httpd/common.h
@@ -311,7 +376,7 @@ jobs:
         ##包含 Aria2 WEB 控制界面。约 0.7MB。
         echo "CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=n" >> .config
 
-        
+
 
         ##下载工具 curl 必备
         echo "CONFIG_FIRMWARE_INCLUDE_CURL=y" >> .config
@@ -355,8 +420,8 @@ jobs:
          ## KMS服务器 已删除 /trunk/user/httpd/common.h
         echo "CONFIG_FIRMWARE_INCLUDE_VLMCSD=n" >> .config
 
-         ## TTYD
-        echo "CONFIG_FIRMWARE_INCLUDE_TTYD=y" >> .config
+         ## TTYD 已删除
+        echo "CONFIG_FIRMWARE_INCLUDE_TTYD=n" >> .config
 
          ## 文件传输工具
         echo "CONFIG_FIRMWARE_INCLUDE_LRZSZ=y" >> .config
@@ -389,42 +454,41 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
 
         ##################################
-        
-        echo "CONFIG_FIRMWARE_INCLUDE_FRPC=y" >> .config  ## FRPC 客户端 约8k
-        echo "CONFIG_FIRMWARE_INCLUDE_FRPS=y" >> .config  ## FRPS 服务端 约8k
+        echo "CONFIG_FIRMWARE_INCLUDE_NPC=y" >> .config  ## NPS服务(npc) 二进制启用时从GitHub下载, 不占固件
+        echo "CONFIG_FIRMWARE_INCLUDE_FRPC=n" >> .config  ## FRPC 客户端 约8k
+        echo "CONFIG_FIRMWARE_INCLUDE_FRPS=n" >> .config  ## FRPS 服务端 约8k
         echo "CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y" >> .config  ## wireguard 约1M
         echo "CONFIG_FIRMWARE_INCLUDE_TUNSAFE=n" >> .config ## tunsafe（wireguard的TCP方式）
-        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y" >> .config ## zerotier 约 20k
+        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config ## zerotier 已移除, 改用 Tailscale(事件位 59)
         echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y" >> .config #阿里DDNS ~20k
+echo "CONFIG_FIRMWARE_INCLUDE_NPC=y" >> .config #npc内网穿透
+echo "CONFIG_FIRMWARE_INCLUDE_DDNSPOD=y" >> .config #DNSPod DDNS
+        echo "CONFIG_FIRMWARE_INCLUDE_DDNSPOD=y" >> .config #DNSPod DDNS
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=n" >> .config #ddnsto 约800k  已删除 /trunk/user/httpd/common.h
         echo "CONFIG_FIRMWARE_INCLUDE_TAILSCALE=y" >> .config #tailscale 约20k
-        echo "CONFIG_FIRMWARE_INCLUDE_NATPIERCE=y" >> .config #皎月连 约20k
+        echo "CONFIG_FIRMWARE_INCLUDE_NATPIERCE=n" >> .config #皎月连 约20k
         echo "CONFIG_FIRMWARE_INCLUDE_VNTCLI=y" >> .config #vnt客户端 约80k
         echo "CONFIG_FIRMWARE_INCLUDE_VNTS=y" >> .config #vnt服务端 约50k
-        echo "CONFIG_FIRMWARE_INCLUDE_CLOUDFLARED=y" >> .config #CF的隧道 约50k
-        echo "CONFIG_FIRMWARE_INCLUDE_LUCKY=y" >> .config #LUCKY 约50k
-        echo "CONFIG_FIRMWARE_INCLUDE_CLOUDFLARE=y" >> .config #CF-ddns 约50k
+        echo "CONFIG_FIRMWARE_INCLUDE_CLOUDFLARED=n" >> .config #CF的隧道 约50k
+        echo "CONFIG_FIRMWARE_INCLUDE_LUCKY=n" >> .config #LUCKY 约50k
+        echo "CONFIG_FIRMWARE_INCLUDE_CLOUDFLARE=n" >> .config #CF-ddns 约50k
         echo "CONFIG_FIRMWARE_INCLUDE_EASYTIER=y" >> .config #EasyTier 约50k
         
-        echo "CONFIG_FIRMWARE_INCLUDE_ALIST=y" >> .config #ALIST文件列表 约80k
-        echo "CONFIG_FIRMWARE_INCLUDE_WXSEND=y" >> .config #微信推送 约50k
-        echo "CONFIG_FIRMWARE_INCLUDE_UUPLUGIN=y" >> .config #网易UU加速器 约50k
-        
+        echo "CONFIG_FIRMWARE_INCLUDE_ALIST=n" >> .config #ALIST文件列表 约80k
+        echo "CONFIG_FIRMWARE_INCLUDE_WXSEND=n" >> .config #微信推送 约50k
+        echo "CONFIG_FIRMWARE_INCLUDE_UUPLUGIN=n" >> .config #网易UU加速器 约50k
         echo "CONFIG_FIRMWARE_INCLUDE_ALDRIVER=n" >> .config #阿里云盘 约50k
-        sed -i 's/EVM_RESTART_ALDRIVER/EVM_RESTART_VIRTUALHERE/g' ./user/httpd/common.h
-        echo "CONFIG_FIRMWARE_INCLUDE_VIRTUALHERE=y" >> .config #virtualhere 约30k 后期需要自行下载可执行文件 在trunk/user/virtualhere 
-        
         echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config #网易云解锁 约80k 已删除 /trunk/user/httpd/common.h
-        echo "CONFIG_FIRMWARE_INCLUDE_BAFA=y" >> .config #巴法云 约90k
-        echo "CONFIG_FIRMWARE_INCLUDE_CADDY=y" >> .config #在线文件管理服务不占空间(4.0kb左右)
+        echo "CONFIG_FIRMWARE_INCLUDE_BAFA=n" >> .config #巴法云 约90k
+        echo "CONFIG_FIRMWARE_INCLUDE_CADDY=n" >> .config #在线文件管理服务不占空间(4.0kb左右)
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config #smartdns
         echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config #adguardhome不占空间(7.2kb左右)
-        echo "CONFIG_FIRMWARE_INCLUDE_NETCAT=y" >> .config #nc工具
+        echo "CONFIG_FIRMWARE_INCLUDE_NETCAT=n" >> .config #nc工具
         echo "CONFIG_FIRMWARE_INCLUDE_MSD_LITE=y" >> .config #MSD_LITE工具
         
-        #sed -i 's/EVM_RESTART_SMARTDNS/EVM_RESTART_V2RAYA/g' ./user/httpd/common.h
-        #echo "CONFIG_FIRMWARE_INCLUDE_V2RAYA=y" >> .config #v2raya 已删除 /trunk/user/httpd/common.h
-        #echo "CONFIG_FIRMWARE_INCLUDE_NVPPROXY=n" >> .config #NVPPROXY 已删除 /trunk/user/httpd/common.h
+        
+        #echo "CONFIG_FIRMWARE_INCLUDE_V2RAYA=n" >> .config #v2raya 已删除 /trunk/user/httpd/common.h
+        #echo "CONFIG_FIRMWARE_INCLUDE_NVPPROXY=n" >> .config #NVPPROXY 已删除 请查看/trunk/user/httpd/common.h
         ##科学上网## 已删除 请查看/trunk/user/httpd/common.h
         #echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=n" >> .config #SS plus+ 科学上网插件
         #echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=n" >> .config #无需集成会在线下载
@@ -434,8 +498,25 @@ jobs:
         
         #########################################################################################
         sudo ./clear_tree
-        sudo ./build_firmware_modify $TNAME 0
-        sudo mv -f images/MI-R3P_3.4.3.9-099.trx /opt/images/MI-R3P-breed_3.4.3.9-099.trx
+        set +e
+        sudo ./build_firmware_modify $TNAME 0 2>&1 | tee /tmp/build.log
+        BUILD_EXIT=${PIPESTATUS[0]}
+        set -e
+        if [ $BUILD_EXIT -ne 0 ]; then
+          echo "::error::Build failed (exit $BUILD_EXIT)"
+          # 用 printf 逐行输出，避免管道子 shell 吞掉 workflow command
+          # 关键：把最后 60 行写成独立 annotation
+          tail -60 /tmp/build.log > /tmp/build.tail
+          while IFS= read -r line; do printf '::error::%s\n' "$line"; done < /tmp/build.tail
+          # 把 build.log 推送到仓库 build-log 分支（用 secrets.GITHUB_TOKEN，run 步骤无 GITHUB_TOKEN 环境变量）
+          mkdir -p /tmp/logrepo && cd /tmp/logrepo
+          git init -q && git config user.email "ci@github" && git config user.name "ci"
+          cp /tmp/build.log ./build.log
+          git add build.log && git commit -q -m "build log $(date +%s)" || true
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:build-log || true
+          exit $BUILD_EXIT
+        fi
+        sudo mv -f images/*.trx /opt/images/
         cp -f .config /opt/images/${TNAME}.config
         echo "build_time=$(date '+%Y年%m月%d日%H:%M:%S' | jq -sRr @uri)" >> $GITHUB_ENV
         echo "tag=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
@@ -443,17 +524,24 @@ jobs:
       uses: actions/upload-artifact@master
       if: always()
       with:
-        name: MI-R3P-breed
+        name: R2100
         path: /opt/images
+    - name : Upload build log
+      uses: actions/upload-artifact@master
+      if: always()
+      with:
+        name: R2100-build-log
+        path: /tmp/build.log
 
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-           > ### ![](https://img.shields.io/badge/%E7%BC%96%E8%AF%91%E6%97%B6%E9%97%B4-${{ env.build_time }}-8267?logo=github&labelColor=%E9%A1%BB)![](https://img.shields.io/github/downloads/${{ github.repository }}/${{ env.tag }}/total?label=%E4%B8%8B%E8%BD%BD%E6%AC%A1%E6%95%B0&logo=github) 
+           > ### ![](https://img.shields.io/badge/%E7%BC%96%E8%AF%91%E6%97%B6%E9%97%B4-${{ env.build_time }}-8267?logo=github&labelColor=%E9%A1%BB)![](https://img.shields.io/github/downloads/${{ github.repository }}/${{ env.tag }}/total?label=%E4%B8%8B%E8%BD%BD%E6%AC%A1%E6%95%B0&logo=github)
 
            `型号.config` 是集成的插件模板
            
         tag_name: ${{ env.tag }}
         files: /opt/images/*
+

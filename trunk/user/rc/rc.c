@@ -1414,12 +1414,12 @@ handle_notifications(void)
 			restart_vntcli();
 		}
 #endif
-/*#if defined(APP_NPC)
+#if defined(APP_NPC)
 		else if (strcmp(entry->d_name, RCN_RESTART_NPC) == 0)
 		{
 			restart_npc();
 		}
-#endif*/
+#endif
 #if defined(APP_LUCKY)
 		else if (strcmp(entry->d_name, RCN_RESTART_LUCKY) == 0)
 		{
@@ -1466,6 +1466,12 @@ handle_notifications(void)
 		else if (strcmp(entry->d_name, RCN_RESTART_ALIDDNS) == 0)
 		{
 			restart_aliddns();
+		}
+#endif
+#if defined(APP_DDNSPOD)
+		else if (strcmp(entry->d_name, RCN_RESTART_DDNSPOD) == 0)
+		{
+			restart_ddnspod();
 		}
 #endif
 #if defined(APP_CLOUDFLARE)

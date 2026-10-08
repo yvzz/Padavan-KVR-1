@@ -615,7 +615,7 @@ void restart_vntcli(void){
 }
 #endif
 
-/*#if defined(APP_NPC)
+#if defined(APP_NPC)
 void stop_npc(void){
 	eval("/usr/bin/npc.sh","stop");
 }
@@ -628,7 +628,7 @@ void restart_npc(void){
 	stop_npc();
 	start_npc();
 }
-#endif*/
+#endif
 #if defined(APP_LUCKY)
 void stop_lucky(void){
 	eval("/usr/bin/lucky.sh","stop");
@@ -771,6 +771,23 @@ void start_aliddns(void){
 void restart_aliddns(void){
     stop_aliddns();
 	start_aliddns();
+}
+#endif
+
+#if defined(APP_DDNSPOD)
+void stop_ddnspod(void){
+	eval("/usr/bin/ddnspod.sh","stop");
+}
+
+void start_ddnspod(void){
+	int ddnspod_mode = nvram_get_int("ddnspod_enable");
+	if ( ddnspod_mode == 1)
+		eval("/usr/bin/ddnspod.sh","start");
+}
+
+void restart_ddnspod(void){
+    stop_ddnspod();
+	start_ddnspod();
 }
 #endif
 
@@ -1153,9 +1170,9 @@ stop_services(int stopall)
 #if defined(APP_NATPIERCE)
 	stop_natpierce();
 #endif
-/*#if defined(APP_NPC)
+#if defined(APP_NPC)
 	stop_npc();
-#endif*/
+#endif
 #if defined(APP_LUCKY)
 	stop_lucky();
 #endif
@@ -1195,6 +1212,9 @@ stop_services(int stopall)
 #endif
 #if defined(APP_ALIDDNS)
 	stop_aliddns();
+#endif
+#if defined(APP_DDNSPOD)
+	stop_ddnspod();
 #endif
 #if defined(APP_CLOUDFLARE)
 	stop_cloudflare();

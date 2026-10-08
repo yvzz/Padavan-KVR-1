@@ -242,8 +242,9 @@ endif
 dir_$(CONFIG_FIRMWARE_INCLUDE_KOOLPROXY)		+= koolproxy
 dir_$(CONFIG_FIRMWARE_INCLUDE_ADBYBY)			+= adbyby
 dir_$(CONFIG_FIRMWARE_INCLUDE_ALIDDNS)			+= aliddns
+dir_$(CONFIG_FIRMWARE_INCLUDE_DDNSPOD)			+= ddnspod
 dir_$(CONFIG_FIRMWARE_INCLUDE_NVPPROXY)			+= nvpproxy
-#dir_$(CONFIG_FIRMWARE_INCLUDE_NPC)				+= npc
+dir_$(CONFIG_FIRMWARE_INCLUDE_NPC)				+= npc
 dir_$(CONFIG_FIRMWARE_INCLUDE_DDNSTO)	        += ddnsto
 dir_$(CONFIG_FIRMWARE_INCLUDE_ALDRIVER)	                       += aliyundrive-webdav
 dir_$(CONFIG_FIRMWARE_INCLUDE_UUPLUGIN)	                       += uuplugin

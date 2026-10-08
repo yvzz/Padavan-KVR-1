@@ -572,6 +572,11 @@ void stop_aliddns(void);
 void start_aliddns(void);
 void restart_aliddns(void);
 #endif
+#if defined(APP_DDNSPOD)
+void stop_ddnspod(void);
+void start_ddnspod(void);
+void restart_ddnspod(void);
+#endif
 #if defined(APP_CLOUDFLARE)
 void stop_cloudflare(void);
 void start_cloudflare(void);
@@ -612,11 +617,11 @@ void stop_vntcli(void);
 void start_vntcli(void);
 void restart_vntcli(void);
 #endif
-/*#if defined(APP_NPC)
+#if defined(APP_NPC)
 void stop_npc(void);
 void start_npc(void);
 void restart_npc(void);
-#endif*/
+#endif
 #if defined(APP_LUCKY)
 void stop_lucky(void);
 void start_lucky(void);

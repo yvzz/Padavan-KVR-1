@@ -59,6 +59,7 @@ typedef u_int8_t u8;
 #define EVM_RESTART_WIFI5			(1ULL << 13)
 #define EVM_RESTART_SWITCH_CFG			(1ULL << 14)
 #define EVM_RESTART_SWITCH_VLAN			(1ULL << 15)
+#define EVM_RESTART_NPC				(1ULL << 16) //npc内网穿透
 #define EVM_RESTART_LAN				(1ULL << 17)
 #define EVM_RESTART_WAN				(1ULL << 18)
 #define EVM_RESTART_IPV6			(1ULL << 19)
@@ -85,6 +86,9 @@ typedef u_int8_t u8;
 //#define EVM_RESTART_NFSD			(1ULL << 38) //nfsd文件系统
 #define EVM_RESTART_EASYTIER			(1ULL << 38) // Easyier异地组网
 #define EVM_RESTART_DMS				(1ULL << 39) //Minidlna UPnP 媒体服务器
+// DNSPod DDNS 复用位 39: MiniDLNA 在全部 CI 工作流中均为 n(见 .github/workflows/*.yml),
+// 实际不会与 DNSPOD 同时启用; 若手动开启 CONFIG_FIRMWARE_INCLUDE_MINIDLNA=y 则两者会互相吞事件
+#define EVM_RESTART_DDNSPOD			(1ULL << 39) //DNSPod 动态域名
 #define EVM_RESTART_ITUNES			(1ULL << 40) //Firefly iTunes 媒体服务器
 //#define EVM_RESTART_TRMD			(1ULL << 41) //#TRANSMISSION
 #define EVM_RESTART_CLOUDFLARE			(1ULL << 41)  //CF的ddns
@@ -145,6 +149,7 @@ typedef u_int8_t u8;
 #define EVT_RESTART_WIFI5			3
 #define EVT_RESTART_SWITCH_CFG		3
 #define EVT_RESTART_SWITCH_VLAN		3
+#define EVT_RESTART_NPC				2
 #define EVT_RESTART_LAN				5
 #define EVT_RESTART_WAN				5
 #define EVT_RESTART_IPV6			3
@@ -168,6 +173,7 @@ typedef u_int8_t u8;
 #define EVT_RESTART_SMBD			2
 #define EVT_RESTART_NFSD			2
 #define EVT_RESTART_DMS				2
+#define EVT_RESTART_DDNSPOD			2
 #define EVT_RESTART_ITUNES			2
 #define EVT_RESTART_TRMD			3
 #define EVT_RESTART_ARIA			3
