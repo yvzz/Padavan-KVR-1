@@ -210,9 +210,6 @@ ifneq ($(CONFIG_FIRMWARE_INCLUDE_ADBYBY),y)
 	rm -f $(INSTALLDIR)/www/Advanced_adbyby.asp
 	rm -f $(INSTALLDIR)/www/Ad_action.asp
 endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIDDNS),y)
-	rm -f $(INSTALLDIR)/www/Advanced_aliddns.asp
-endif
 # DDNS 服务(阿里DDNS/DNSPod/Cloudflare 三页签合并页): 三者都没开时才删
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIDDNS),y)
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_DDNSPOD),y)
@@ -222,9 +219,6 @@ endif
 endif
 endif
 
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_DDNSPOD),y)
-	rm -f $(INSTALLDIR)/www/Advanced_ddnspod.asp
-endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME),y)
 	rm -f $(INSTALLDIR)/www/Advanced_adguardhome.asp
 endif
@@ -286,9 +280,6 @@ ifneq ($(CONFIG_FIRMWARE_INCLUDE_TAILSCALE),y)
 endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIST),y)
 	rm -f $(INSTALLDIR)/www/Advanced_alist.asp
-endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_CLOUDFLARE),y)
-	rm -f $(INSTALLDIR)/www/Advanced_cloudflare.asp
 endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_EASYTIER),y)
 	rm -f $(INSTALLDIR)/www/Advanced_easytier.asp
