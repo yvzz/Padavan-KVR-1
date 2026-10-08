@@ -23,7 +23,9 @@ et_extra_args="$(nvram get easytier_extra_args)"
 [ -z "$et_web_api" ] && et_web_port=11211
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义加速站优先, 后面始终追加内置加速站(实测可达的 3 个),
+# 末尾 DIRECT 为哨兵(循环中置空 = 直连), 保证 github_proxy 失效时仍能下载
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/ DIRECT"
 easytier_renum=`nvram get easytier_renum`
 
 logg() {
@@ -66,11 +68,11 @@ get_tag() {
 	curltest=`which curl`
 	logg "开始获取最新版本..."
     	if [ -z "$curltest" ] || [ ! -s "`which curl`" ] ; then
-      		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/lmq8267/EasyTier/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/EasyTier/EasyTier/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/lmq8267/EasyTier/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/EasyTier/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/EasyTier/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/EasyTier/EasyTier/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/EasyTier/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logg "无法获取最新版本"  
 	nvram set easytier_ver_n=$tag
@@ -85,18 +87,60 @@ get_tag() {
 	fi
 }
 
-dowload_et() {
+# 官方源: EasyTier/EasyTier 的 easytier-linux-mipsel-<tag>.zip (内含 easytier-core / easytier-cli), 约 8.9M
+dowload_et_official() {
 	tag="$1"
 	bin_path=$(dirname "$et_core")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
-	logg "开始下载 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
+	zip_name="easytier-linux-mipsel-${tag}.zip"
 	for proxy in $github_proxys ; do
+	[ "$proxy" = "DIRECT" ] && proxy=""
+	logg "开始下载官方 ${proxy}https://github.com/EasyTier/EasyTier/releases/download/${tag}/${zip_name}"
+	curl -Lko /tmp/${zip_name} --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/EasyTier/EasyTier/releases/download/${tag}/${zip_name}" || wget --no-check-certificate -T 30 -O /tmp/${zip_name} "${proxy}https://github.com/EasyTier/EasyTier/releases/download/${tag}/${zip_name}"
+	if [ "$?" = 0 ] ; then
+		rm -rf /tmp/easytier_official
+		mkdir -p /tmp/easytier_official
+		unzip -o /tmp/${zip_name} -d /tmp/easytier_official
+		if [ -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core ] ; then
+			cp -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core "$bin_path/easytier-core"
+			cp -f /tmp/easytier_official/easytier-linux-mipsel/easytier-cli "$bin_path/easytier-cli"
+			chmod +x "$bin_path/easytier-core" "$bin_path/easytier-cli"
+		fi
+		chmod +x $et_core
+		if [[ "$($et_core -h 2>&1 | wc -l)" -gt 3 ]] ; then
+			logg "$et_core 官方版本下载成功"
+			et_ver=$($et_core -V | awk '{print $2}' | tr -d ' ' | tr -d '\n')
+			if [ -z "$et_ver" ] ; then
+				nvram set easytier_ver=""
+			else
+				nvram set easytier_ver="v${et_ver}"
+			fi
+			rm -rf /tmp/${zip_name} /tmp/easytier_official
+			return 0
+		else
+			logg "官方版本不可用(可能与本机不兼容), 改用镜像源"
+			rm -f $et_core
+			rm -rf /tmp/${zip_name} /tmp/easytier_official
+		fi
+	fi
+	done
+	return 1
+}
+
+# 镜像兜底: lmq8267/EasyTier 的 easytier-mipsel-linux-muslsf.tar.gz (musl 软浮点), 约 15.5M
+dowload_et_mirror() {
+	tag="$1"
+	bin_path=$(dirname "$et_core")
+	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
+	logg "开始下载镜像 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
+	for proxy in $github_proxys ; do
+	[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	et_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logg "程序大小 ${length}M， 程序路径可用空间 ${et_size0}M "
-        curl -Lko /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" || wget --no-check-certificate -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
+        curl -Lko /tmp/easytier-mipsel-linux-muslsf.tar.gz --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" || wget --no-check-certificate -T 30 -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	if [ "$?" = 0 ] ; then
 		tar -xzf /tmp/easytier-mipsel-linux-muslsf.tar.gz -O easytier-core > "$bin_path/easytier-core"
   		tar -xzf /tmp/easytier-mipsel-linux-muslsf.tar.gz -O easytier-cli > "$bin_path/easytier-cli"
@@ -122,18 +166,28 @@ dowload_et() {
 	done
 }
 
+# 主入口: 有 unzip 就先试官方源(体积小), 失败再回退镜像源
+dowload_et() {
+	tag="$1"
+	if command -v unzip >/dev/null 2>&1 ; then
+		dowload_et_official "$tag" && return 0
+	fi
+	dowload_et_mirror "$tag"
+}
+
 dowload_web() {
 	tag="$1"
 	webbin_path=$(dirname "$et_web_bin")
 	[ ! -d "$webbin_path" ] && mkdir -p "$webbin_path"
 	logg "开始下载 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	for proxy in $github_proxys ; do
+	[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	et_size0="$(check_disk_size $webbin_path)"
  	[ ! -z "$length" ] && logg "程序大小 ${length}M， 程序路径可用空间 ${et_size0}M "
-        curl -Lko /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" || wget --no-check-certificate -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
+        curl -Lko /tmp/easytier-mipsel-linux-muslsf.tar.gz --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" || wget --no-check-certificate -T 30 -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	if [ "$?" = 0 ] ; then
 		tar -xzf /tmp/easytier-mipsel-linux-muslsf.tar.gz -O easytier-web > "$webbin_path/easytier-web"
 		chmod +x $et_web_bin
@@ -155,11 +209,13 @@ dowload_web() {
 update_et() {
 	get_tag
 	[ -z "$tag" ] && logg "无法获取最新版本" && exit 1
-	tag=$(echo $tag | tr -d 'v' | tr -d ' ' | tr -d '\n')
-	et_ver=$(echo $et_ver | cut -d '-' -f1)
+	tag=$(echo $tag | tr -d ' ' | tr -d '\n')
+	# 注意: tag 必须保留前缀 v (下载地址里带 v), 比较版本时再各自剥掉 v
+	tag_ver=$(echo $tag | tr -d 'v')
+	et_ver=$(echo $et_ver | cut -d '-' -f1 | tr -d 'v' | tr -d ' ' | tr -d '\n')
 	if [ ! -z "$tag" ] && [ ! -z "$et_ver" ] ; then
-		if [ "$tag"x != "$et_ver"x ] ; then
-			logg "当前版本${et_ver} 最新版本${tag}"
+		if [ "$tag_ver"x != "$et_ver"x ] ; then
+			logg "当前版本${et_ver} 最新版本${tag_ver}"
 			dowload_et $tag
 		else
 			logg "当前已是最新版本 ${tag} 无需更新！"
