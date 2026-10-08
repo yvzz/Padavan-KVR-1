@@ -274,9 +274,9 @@ else
 CFLAGS += -DAPP_FRP
 endif
 
-#ifeq ($(CONFIG_FIRMWARE_INCLUDE_NPC),y)
+ifeq ($(CONFIG_FIRMWARE_INCLUDE_NPC),y)
 CFLAGS += -DAPP_NPC
-#endif
+endif
 ifeq ($(CONFIG_FIRMWARE_INCLUDE_LUCKY),y)
 CFLAGS += -DAPP_LUCKY
 endif

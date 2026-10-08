@@ -214,7 +214,6 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_TROJAN/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SSOBFS/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_NPC/d' .config
-sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSPOD/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_OPENVPN/d' .config
         # 清除默认配置结束
         ######################################################################
@@ -461,8 +460,6 @@ sed -i '/CONFIG_FIRMWARE_INCLUDE_DDNSPOD/d' .config
         echo "CONFIG_FIRMWARE_INCLUDE_TUNSAFE=n" >> .config ## tunsafe（wireguard的TCP方式）
         echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config ## zerotier 已移除, 改用 Tailscale(事件位 59)
         echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=y" >> .config #阿里DDNS ~20k
-echo "CONFIG_FIRMWARE_INCLUDE_NPC=y" >> .config #npc内网穿透
-echo "CONFIG_FIRMWARE_INCLUDE_DDNSPOD=y" >> .config #DNSPod DDNS
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSPOD=y" >> .config #DNSPod DDNS
         echo "CONFIG_FIRMWARE_INCLUDE_DDNSTO=n" >> .config #ddnsto 约800k  已删除 /trunk/user/httpd/common.h
         echo "CONFIG_FIRMWARE_INCLUDE_TAILSCALE=y" >> .config #tailscale 约20k
