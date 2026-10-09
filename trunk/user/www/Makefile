@@ -220,9 +220,7 @@ endif
 endif
 
 # 组网服务已拆分: 各插件(EasyTier/Tailscale/VNT客户端/VNT服务端/NPC/WireGuard)恢复独立页面,
-# 合并页 Advanced_vpn.asp 不再使用, 无条件剔除
-	rm -f $(INSTALLDIR)/www/Advanced_vpn.asp
-
+# 合并页 Advanced_vpn.asp 已删除
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME),y)
 	rm -f $(INSTALLDIR)/www/Advanced_adguardhome.asp
 endif

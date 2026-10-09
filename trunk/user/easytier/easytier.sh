@@ -34,6 +34,25 @@ logg() {
   logger -t "【EasyTier】" "$1"
 }
 
+# 下载互斥锁: 用 mkdir 原子性抢锁, 防止多个 start_core/start_web 并发下载互相踩踏、耗尽小 /tmp.
+# 抢锁成功返回 0; 已有实例在下载则返回 1(调用方应直接退出, 等守护下次重试).
+dl_lock="/var/lock/easytier_dl.lock"
+dl_lock_try() {
+	if mkdir "$dl_lock" 2>/dev/null ; then
+		return 0
+	fi
+	# 锁已存在, 判断是否超时残留(下载最长约 90+90 秒, 超过 240 秒视为僵死锁, 强制清除)
+	if [ -f "$dl_lock/ts" ] ; then
+		_ts=$(cat "$dl_lock/ts" 2>/dev/null)
+		_now=$(date +%s)
+		[ -n "$_ts" ] && [ $((_now - _ts)) -gt 240 ] && { rm -rf "$dl_lock"; mkdir "$dl_lock" 2>/dev/null && return 0; }
+	fi
+	return 1
+}
+dl_lock_release() {
+	rm -rf "$dl_lock" 2>/dev/null
+}
+
 et_restart () {
 relock="/var/lock/easytier_restart.lock"
 if [ "$1" = "o" ] ; then
@@ -209,15 +228,15 @@ dowload_et_mirror() {
 	done
 }
 
-# 主入口: 先清旧残留腾空间, 再官方源优先(体积小, 适合小 /tmp), 失败回退镜像源
+# 主入口: 先清旧残留腾空间, 只走官方源(8.9M 小包, 适配 K2P 30M 小 /tmp).
+# 镜像源(16M tar + 20M 二进制)在小 /tmp 上根本放不下, 是"可用空间 0M"的元凶, 已移除.
 dowload_et() {
 	tag="$1"
 	# 清理历史残留的下载包, 避免小容量 /tmp 被旧文件占满导致新下载放不下
 	rm -f /tmp/easytier-linux-*.zip /tmp/easytier-mipsel-linux-*.tar.gz 2>/dev/null
 	rm -rf /tmp/easytier_official 2>/dev/null
-	# 官方源(8.9M zip, 解压后 ~9.4M)优先; 镜像源(16M tar + 20M 二进制)是小 /tmp 放不下的兜底
-	dowload_et_official "$tag" && return 0
-	dowload_et_mirror "$tag"
+	# 官方源(8.9M zip)是唯一适配小 /tmp 的可靠来源; 失败则返回非 0, 由守护下次重试
+	dowload_et_official "$tag"
 }
 
 dowload_web() {
@@ -275,25 +294,13 @@ core_keep() {
 	logg "Core守护进程启动"
 	if [ -s /tmp/script/_opt_script_check ]; then
 	sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check
-	if [ -z "$et_tunname" ] ; then
-		tunname="tun0"
-	else
-		tunname="${et_tunname}"
-	fi
+	# 只保留"进程掉线→start"一条核心规则.
+	# 防火墙/端口失效不再触发完整 start(那会并发重下载、互相踩踏耗尽小 /tmp),
+	# 防火墙规则在 start_core 成功后的 et_rules 里会随进程一起重建.
 	cat >> "/tmp/script/_opt_script_check" <<-OSC
 	[ -z "\`pidof easytier-core\`" ] && logger -t "进程守护" "EasyTier_core 进程掉线" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check #【EasyTier_core】
-	[ -z "\$(iptables -L -n -v | grep '$tunname')" ] && logger -t "进程守护" "EasyTier_core 防火墙规则失效" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check #【EasyTier_core】
  	[ -s /tmp/easytier.log ] && [ "\$(stat -c %s /tmp/easytier.log)" -gt 4194304 ] && echo "" > /tmp/easytier.log & #【EasyTier_core】
 	OSC
-	if [ ! -z "$et_ports" ] ; then
-		et_portss=$(echo $et_ports | tr -d '\r')
-		for et_port in $et_portss ; do
-			[ -z "$et_port" ] && continue
-			cat >> "/tmp/script/_opt_script_check" <<-OSC
-	[ -z "\$(iptables -L -n -v | grep '$et_port')" ] && logger -t "进程守护" "EasyTier_core 防火墙规则失效" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check #【EasyTier_core】
-	OSC
-		done	
-	fi
 	fi
 
 }
@@ -302,18 +309,11 @@ web_keep() {
 	logg "Web守护进程启动"
 	if [ -s /tmp/script/_opt_script_check ]; then
 	sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check
+	# 与 core_keep 同理, 只保留"进程掉线→start"一条核心规则.
 	cat >> "/tmp/script/_opt_script_check" <<-OSC
 	[ -z "\`pidof easytier-web\`" ] && logger -t "进程守护" "EasyTier_web 进程掉线" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check #【EasyTier_web】
- 	[ -z "\$(iptables -L -n -v | grep '$et_web_port')" ] && logger -t "进程守护" "EasyTier_web 防火墙规则失效" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check #【EasyTier_web】
-  	[ -z "\$(iptables -L -n -v | grep '$et_web_api')" ] && logger -t "进程守护" "EasyTier_web 防火墙规则失效" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check #【EasyTier_web】
  	[ -s /tmp/easytier_web.log ] && [ "\$(stat -c %s /tmp/easytier_web.log)" -gt 4194304 ] && echo "" > /tmp/easytier_web.log & #【EasyTier_web】
 	OSC
-	
-	if [ ! -z "$et_html_port" ] ; then
-	cat >> "/tmp/script/_opt_script_check" <<-OSC
- 	[ -z "\$(iptables -L -n -v | grep '$et_html_port')" ] && logger -t "进程守护" "EasyTier_web 防火墙规则失效" && eval "$scriptfilepath start &" && sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check #【EasyTier_web】
-	OSC
-	fi
 	fi
 
 }
@@ -359,9 +359,16 @@ start_core() {
   		[[ "$($et_core -h 2>&1 | wc -l)" -lt 2 ]] && logg "程序${et_core}不完整！" && rm -rf $et_core
   	fi
  	if [ ! -f "$et_core" ] ; then
+		# 抢下载锁, 抢不到说明已有实例在下载, 直接退出等守护下次重试, 避免并发踩踏
+		if ! dl_lock_try ; then
+			logg "已有实例正在下载, 本次跳过"
+			return 1
+		fi
+		date +%s > "$dl_lock/ts"
 		logg "主程序${et_core}不存在，开始在线下载..."
   		[ -z "$tag" ] && tag="v2.6.4"
   		dowload_et $tag
+		dl_lock_release
   	fi
 	sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check
 	killall easytier-core >/dev/null 2>&1
@@ -440,10 +447,17 @@ start_web() {
   		[[ "$($et_web_bin -h 2>&1 | wc -l)" -lt 2 ]] && logg "程序${et_web_bin}不完整！" && rm -rf $et_web_bin
   	fi
  	if [ ! -f "$et_web_bin" ] ; then
+		# 抢下载锁, 避免与 core 下载或其他实例并发踩踏
+		if ! dl_lock_try ; then
+			logg "已有实例正在下载, 本次跳过"
+			return 1
+		fi
+		date +%s > "$dl_lock/ts"
   		get_tag
 		logg "程序${et_web_bin}不存在，开始在线下载..."
   		[ -z "$tag" ] && tag="v2.6.4"
   		dowload_web $tag
+		dl_lock_release
   	fi
 	sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check
 	webCMD=""

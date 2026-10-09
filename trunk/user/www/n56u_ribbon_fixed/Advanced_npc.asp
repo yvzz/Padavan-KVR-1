@@ -26,6 +26,8 @@ var $j = jQuery.noConflict();
 $j(document).ready(function() {
 
 	init_itoggle('npc_enable',change_npc_enable_bridge);
+	init_itoggle('npc_compress');
+	init_itoggle('npc_crypt');
 
 });
 
