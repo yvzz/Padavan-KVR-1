@@ -51,21 +51,47 @@ if(m_mapplist.length > 0){
 }
 
 /* 一级页签(服务) 与 二级页签(各服务自己的设置/状态/日志) */
-var services = ["easytier","tailscale","vntcli","vnts","npc"];
+var services = ["easytier","tailscale","vntcli","vnts","npc","wireguard"];
 var subTabs = {
 	"easytier":  {"prefix":"et",        "subs":["cfg","web","sta","log"]},
 	"tailscale": {"prefix":"tailscale", "subs":["cfg","log"]},
 	"vntcli":    {"prefix":"vntcli",    "subs":["cfg","pri","sta","log","help"]},
 	"vnts":      {"prefix":"vnts",      "subs":["cfg","log"]},
-	"npc":       {"prefix":"npc",       "subs":[]}
+	"npc":       {"prefix":"npc",       "subs":[]},
+	"wireguard": {"prefix":"wg",        "subs":[]}
 };
 var appCheck = {
 	"easytier":  function(){ return found_app_easytier(); },
 	"tailscale": function(){ return found_app_tailscale(); },
 	"vntcli":    function(){ return found_app_vntcli(); },
 	"vnts":      function(){ return found_app_vnts(); },
-	"npc":       function(){ return found_app_npc(); }
+	"npc":       function(){ return found_app_npc(); },
+	"wireguard": function(){ return found_app_wireguard(); }
 };
+
+/* 各服务在 httpd variables.c 里注册的变量组名 */
+var sidGroups = {
+	"easytier":  "EASYTIER",
+	"tailscale": "TAILSCALE",
+	"vntcli":    "VNTCLI",
+	"vnts":      "VNTS",
+	"npc":       "NpcConf",
+	"wireguard": "WIREGUARD"
+};
+
+/* 只提交本固件已编译服务的变量组: 未编译的组在 httpd 的 svcLinks[] 里没有注册,
+   写进 sid_list 会让 update_variables_ex() 取到越界的 sid, apply 直接失败 */
+function build_sid_list(){
+	if (!document.form || !document.form.sid_list)
+		return;
+	var list = "LANHostConfig;General;";
+	for (var i = 0; i < services.length; i++) {
+		var svc = services[i];
+		if (sidGroups[svc] && appCheck[svc]())
+			list = sidGroups[svc] + ";" + list;
+	}
+	document.form.sid_list.value = list;
+}
 
 /* 第一个已编译进固件的服务, 作为默认/回退页签 */
 function firstVisibleService(){
@@ -178,6 +204,9 @@ $j(document).ready(function(){
 	if (appCheck["npc"]())
 		init_itoggle('npc_enable', change_npc_enable_bridge);
 
+	if (appCheck["wireguard"]())
+		init_itoggle('wireguard_enable');
+
 	/* 进入页面时按 URL hash 定位到对应服务/页签 */
 	showTab(window.location.hash);
 
@@ -190,6 +219,7 @@ function initial(){
 	show_banner(2);
 	show_menu(5, 26, 0);
 	show_footer();
+	build_sid_list();
 
 	if (appCheck["vntcli"]()) {
 		showROUTEList();
@@ -233,10 +263,13 @@ function textarea_scripts_enabled(v){
 		inputCtrl(document.form['scripts.vnt.conf'], v);
 	if (document.form['scripts.npc_script.sh'])
 		inputCtrl(document.form['scripts.npc_script.sh'], v);
+	if (document.form['scripts.wg0.conf'])
+		inputCtrl(document.form['scripts.wg0.conf'], v);
 }
 
 function applyRule(){
 	showLoading();
+	build_sid_list();
 
 	document.form.action_mode.value = " Apply ";
 	document.form.current_page.value = "/Advanced_vpn.asp";
@@ -248,6 +281,14 @@ function applyRule(){
 
 function done_validating(action){
 	refreshpage();
+}
+
+/* ============ WireGuard ============ */
+function button_restartwg(){
+	var $j = jQuery.noConflict();
+	$j.post('/apply.cgi', {
+		'action_mode': ' Restartwg '
+	});
 }
 
 /* ============ EasyTier ============ */
@@ -953,6 +994,7 @@ function change_npc_enable_bridge(mflag){
 										<li><a class="svctab" id="tab_net_vntcli" href="#vntcli">VNT客户端</a></li>
 										<li><a class="svctab" id="tab_net_vnts" href="#vnts">VNT服务端</a></li>
 										<li><a class="svctab" id="tab_net_npc" href="#npc">NPC内网穿透</a></li>
+										<li><a class="svctab" id="tab_net_wireguard" href="#wireguard">WireGuard</a></li>
 									</ul>
 								</div>
 
@@ -1026,7 +1068,7 @@ function change_npc_enable_bridge(mflag){
 	<th style="border: 0 none;">程序路径</th>
 	<td style="border: 0 none;">
 	<textarea maxlength="1024" class="input" name="easytier_bin" id="easytier_bin" placeholder="/etc/storage/bin/easytier-core" style="width: 210px; height: 20px; resize: both; overflow: auto;"><% nvram_get_x("","easytier_bin"); %></textarea>
-	</div><br><span style="color:#888;">自定义程序的存放路径，填写完整的路径和程序名称</span>
+	</td><br><span style="color:#888;">自定义程序的存放路径，填写完整的路径和程序名称</span>
 	</tr><td colspan="3"></td>
 	<tr id="log_tr"> 
 	<th width="30%" style="border-top: 0 none;" title="--console-log-level  控制台日志级别">日志等级</th>
@@ -1054,7 +1096,6 @@ function change_npc_enable_bridge(mflag){
 	<input name="easytier_tunname" type="text" class="input" id="easytier_tunname" placeholder="tun0" onkeypress="return is_string(this,event);" value="<% nvram_get_x("","easytier_tunname"); %>" size="32" maxlength="15" /></td>
 	</td>
 	</tr>
-	</table>
 	<tr>
 	<td colspan="4" style="border-top: 0 none; padding-bottom: 20px;">
 	<br />
@@ -1062,7 +1103,6 @@ function change_npc_enable_bridge(mflag){
 	</td></td>
 	</tr><br>																
 	</table>
-	</div>
 	</div>
 	</div>
 	<!-- WEB设置 -->
@@ -1213,6 +1253,7 @@ function change_npc_enable_bridge(mflag){
 		</td>
 	</tr>
 	</table>
+	</div>
 
 	<!-- 日志 -->
 	<div id="wnd_et_log" style="display:none">
@@ -1237,8 +1278,8 @@ function change_npc_enable_bridge(mflag){
 	<span style="color:#888;">🚫注意：日志可能包含一些隐私信息，切勿随意分享！</span>
 	</td>
 	</table>
+	</div>
 
-	</table>
 								</div>
 
 								<!-- ============ Tailscale ============ -->
@@ -1425,7 +1466,7 @@ function change_npc_enable_bridge(mflag){
 	<th style="border: 0 none;">程序路径</th>
 	<td style="border: 0 none;">
 		<textarea maxlength="1024"class="input" name="tailscale_bin" id="tailscale_bin" placeholder="/etc/storage/bin/tailscaled" style="width: 210px; height: 20px; resize: both; overflow: auto;"><% nvram_get_x("","tailscale_bin"); %></textarea>
-	</div><br><span style="color:#888;">自定义主程序的存放路径，填写完整的路径和主程序名称</span>
+	</td><br><span style="color:#888;">自定义主程序的存放路径，填写完整的路径和主程序名称</span>
 	</tr><td colspan="3"></td>
 	<tr>
 	<td colspan="4" style="border-top: 0 none;">
@@ -1453,6 +1494,7 @@ function change_npc_enable_bridge(mflag){
 	</td>
 	</tr>
 	</table>
+								</div>
 								</div>
 
 								<!-- ============ VNT 客户端 ============ -->
@@ -1589,7 +1631,6 @@ function change_npc_enable_bridge(mflag){
 	</td>
 	</tr>
 	</table>
-	</table>
 	<tr>
 	<td colspan="4" style="border-top: 0 none; padding-bottom: 20px;">
 	<br />
@@ -1597,7 +1638,6 @@ function change_npc_enable_bridge(mflag){
 	</td></td>
 	</tr><br>																
 	</table>
-	</div>
 	</div>
 	</div>
 	<!-- 高级设置 -->
@@ -1821,7 +1861,6 @@ function change_npc_enable_bridge(mflag){
 	<td colspan="5" style="border-top: 0 none; padding-bottom: 20px;">
 	
 	</table>
-	</table>
 	<br />
 	<center><input class="btn btn-primary" style="width: 219px" type="button" value="<#CTL_apply#>" onclick="applyRule()" /></center>
 	</td></td>
@@ -1876,6 +1915,7 @@ function change_npc_enable_bridge(mflag){
 	<span style="color:#888;">🚫注意：日志包含 token 和 密码 等隐私信息，切勿随意分享！</span>
 	</td>
 	</table>
+	</div>
 	<!-- 帮助说明 -->
 	<div id="wnd_vntcli_help" style="display:none">
 	<table width="100%" cellpadding="4" cellspacing="0" class="table">
@@ -2269,7 +2309,7 @@ function change_npc_enable_bridge(mflag){
 	<div style="position: absolute; margin-left: -10000px;">
 	<input type="radio" value="1" name="vnts_disable_relay" id="vnts_disable_relay_1" class="input" value="1" <% nvram_match_x("", "vnts_disable_relay", "1", "checked"); %> /><#checkbox_Yes#>
 	<input type="radio" value="0" name="vnts_disable_relay" id="vnts_disable_relay_0" class="input" value="0" <% nvram_match_x("", "vnts_disable_relay", "0", "checked"); %> /><#checkbox_No#>
-	</div><span style="color:#888;">禁止为客户端提供中继转发数据，仅交换客户端握手数据（客户端之间只能通过P2P进行连接，无法P2P时将无法通讯）</span></td>
+	</td><span style="color:#888;">禁止为客户端提供中继转发数据，仅交换客户端握手数据（客户端之间只能通过P2P进行连接，无法P2P时将无法通讯）</span></td>
 	</td>
 	</tr><td colspan="3"></td>
 	<tr id="vnts_log_tr" >
@@ -2317,6 +2357,7 @@ function change_npc_enable_bridge(mflag){
 	<span style="color:#888;">🚫注意：日志可能包含部分隐私信息，切勿随意分享！</span>
 	</td>
 	</table>
+								</div>
 								</div>
 
 								<!-- ============ NPC 内网穿透 ============ -->
@@ -2425,6 +2466,76 @@ function change_npc_enable_bridge(mflag){
 										
 										<tr>
 											<td colspan="2" style="border-top: 0 none;">
+												<br />
+												<center><input class="btn btn-primary" style="width: 219px" type="button" value="<#CTL_apply#>" onclick="applyRule()" /></center>
+											</td>
+										</tr>
+									</table>
+								</div>
+								</div>
+
+								<!-- ============ WireGuard ============ -->
+								<div id="wnd_net_wireguard" style="display:none">
+								<div class="row-fluid">
+									<div class="alert alert-info" style="margin: 10px;">
+										<p>WireGuard 是一个易于配置、快速且安全的开源VPN</p>
+									</div>
+
+									<table width="100%" align="center" cellpadding="4" cellspacing="0" class="table">
+										<tr>
+											<th width="30%" style="border-top: 0 none;">启用wireguard</th>
+											<td style="border-top: 0 none;">
+												<div class="main_itoggle">
+													<div id="wireguard_enable_on_of">
+														<input type="checkbox" id="wireguard_enable_fake" <% nvram_match_x("", "wireguard_enable", "1", "value=1 checked"); %><% nvram_match_x("", "wireguard_enable", "0", "value=0"); %>  />
+													</div>
+												</div>
+												<div style="position: absolute; margin-left: -10000px;">
+													<input type="radio" value="1" name="wireguard_enable" id="wireguard_enable_1" class="input" <% nvram_match_x("", "wireguard_enable", "1", "checked"); %> /><#checkbox_Yes#>
+													<input type="radio" value="0" name="wireguard_enable" id="wireguard_enable_0" class="input" <% nvram_match_x("", "wireguard_enable", "0", "checked"); %> /><#checkbox_No#>
+												</div>
+											</td>
+											<td style="border-top: 0 none;">
+												<input class="btn btn-success" style="width:150px" type="button" name="restartwg" value="重启" onclick="button_restartwg()" />
+											</td>
+										</tr>
+										<tr>
+											<th style="border-top: 0 none;">接口IPV4</th>
+											<td style="border-top: 0 none;">
+												<input type="text" class="input" name="wireguard_localip" id="wireguard_localip" style="width: 200px" value="<% nvram_get_x("","wireguard_localip"); %>" />
+												&nbsp;<span style="color:#888;">（格式 10.0.0.2/24）</span>
+											</td>
+										</tr>
+										<tr>
+											<th style="border-top: 0 none;">接口IPV6</th>
+											<td style="border-top: 0 none;">
+												<input type="text" class="input" name="wireguard_localip6" id="wireguard_localip6" style="width: 200px" value="<% nvram_get_x("","wireguard_localip6"); %>" />
+												&nbsp;<span style="color:#888;">（格式 fd69::1/64）</span>
+											</td>
+										</tr>
+										<tr>
+											<th style="border-top: 0 none;">自定义接口</th>
+											<td style="border-top: 0 none;">
+												<input type="text" maxlength="20" class="input" name="wireguard_tun" placeholder="wg0" id="wireguard_tun" style="width: 200px" value="<% nvram_get_x("","wireguard_tun"); %>" />
+											</td>
+										</tr>
+										<tr>
+											<th style="border-top: 0 none;">自定义MTU</th>
+											<td style="border-top: 0 none;">
+												<input type="text" maxlength="4" class="input" name="wireguard_mtu" placeholder="1420" id="wireguard_mtu" style="width: 200px" value="<% nvram_get_x("","wireguard_mtu"); %>" />
+											</td>
+										</tr>
+										<tr>
+											<td colspan="3" style="border-top: 0 none;">
+												<i class="icon-hand-right"></i> <a href="javascript:spoiler_toggle('scripts.wireguard')"><span>点此编辑 /etc/storage/wg0.conf 配置文件</span></a>
+												<div id="scripts.wireguard" style="display:none;">
+													<textarea rows="18" wrap="off" spellcheck="false" maxlength="209715" class="span12" name="scripts.wg0.conf" style="font-family:'Courier New'; font-size:12px; height: 200px;"><% nvram_dump("scripts.wg0.conf",""); %></textarea>
+													<div>⚠️&nbsp;&nbsp;<span style="color: #ff8100;">注意：</span><span style="color:#888;">配置文件里不支持Post脚本规则和指定接口IP和DNS&nbsp;&nbsp;&nbsp;&nbsp;在线生成配置文件：<a href="https://www.wireguardconfig.com/" target="blank">点此</a></span></div>
+												</div>
+											</td>
+										</tr>
+										<tr>
+											<td colspan="3" style="border-top: 0 none;">
 												<br />
 												<center><input class="btn btn-primary" style="width: 219px" type="button" value="<#CTL_apply#>" onclick="applyRule()" /></center>
 											</td>

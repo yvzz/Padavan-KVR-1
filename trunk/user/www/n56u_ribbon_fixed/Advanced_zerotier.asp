@@ -78,7 +78,6 @@ function button_updatezerotier() {
 function showmenu(){
 showhide_div('allink', found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare());
 showhide_div('dtolink', found_app_ddnsto());
-showhide_div('wirlink', found_app_wireguard());
 }
 function applyRule(){
 	showLoading();
@@ -228,9 +227,6 @@ function showMRULESList(){
 								</li>
 								<li class="active">
 								    <a href="Advanced_zerotier.asp"><#menu5_32_1#></a>
-								</li>
-								<li id="wirlink" style="display:none">
-								    <a href="Advanced_wireguard.asp"><#menu5_35_1#></a>
 								</li>
 							    </ul>
 							</div>

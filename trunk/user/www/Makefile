@@ -254,16 +254,11 @@ endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_NVPPROXY),y)
 	rm -f $(INSTALLDIR)/www/Advanced_nvpproxy.asp
 endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_NPC),y)
-	rm -f $(INSTALLDIR)/www/Advanced_npc.asp
-	rm -f $(INSTALLDIR)/www/Advanced_npc_log.asp
-endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_DDNSTO),y)
 	rm -f $(INSTALLDIR)/www/Advanced_ddnsto.asp
 endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_WIREGUARD),y)
+# WireGuard 已并入「组网服务」合并页 Advanced_vpn.asp, 独立页面不再进固件(源码保留)
 	rm -f $(INSTALLDIR)/www/Advanced_wireguard.asp
-endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALDRIVER),y)
 	rm -f $(INSTALLDIR)/www/Advanced_aliyundrive.asp
 endif
@@ -279,23 +274,19 @@ endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_CLOUDFLARED),y)
 	rm -f $(INSTALLDIR)/www/Advanced_cloudflared.asp
 endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_VNTS),y)
-	rm -f $(INSTALLDIR)/www/Advanced_vnts.asp
-endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_VNTCLI),y)
+# 组网服务(EasyTier/Tailscale/VNT客户端/VNT服务端/NPC)已合并进 Advanced_vpn.asp,
+# 旧的单服务页面无条件剔除, 避免出现「菜单里没有、却能靠 URL 直接打开」的隐藏入口
+	rm -f $(INSTALLDIR)/www/Advanced_easytier.asp
+	rm -f $(INSTALLDIR)/www/Advanced_tailscale.asp
 	rm -f $(INSTALLDIR)/www/Advanced_vnt.asp
-endif
+	rm -f $(INSTALLDIR)/www/Advanced_vnts.asp
+	rm -f $(INSTALLDIR)/www/Advanced_npc.asp
+	rm -f $(INSTALLDIR)/www/Advanced_npc_log.asp
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_NATPIERCE),y)
 	rm -f $(INSTALLDIR)/www/Advanced_natpierce.asp
 endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_TAILSCALE),y)
-	rm -f $(INSTALLDIR)/www/Advanced_tailscale.asp
-endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ALIST),y)
 	rm -f $(INSTALLDIR)/www/Advanced_alist.asp
-endif
-ifneq ($(CONFIG_FIRMWARE_INCLUDE_EASYTIER),y)
-	rm -f $(INSTALLDIR)/www/Advanced_easytier.asp
 endif
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_BAFA),y)
 	rm -f $(INSTALLDIR)/www/Advanced_bafa.asp

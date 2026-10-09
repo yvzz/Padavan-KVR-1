@@ -429,8 +429,6 @@ if (found_app_aliddns()){
 	tabtitle[16] = new Array("", "<#menu5_32_2#>");
 } else if (found_app_zerotier()){
 	tabtitle[16] = new Array("", "<#menu5_32#>");
-} else if (found_app_wireguard()){
-	tabtitle[16] = new Array("", "<#menu5_35#>");
 }
 if (found_app_frp()){
 	tabtitle[17] = new Array("", "<#menu5_25_1#>");
@@ -463,10 +461,7 @@ if (found_app_natpierce()){
 	tabtitle[26] = new Array("", "皎月连");
 }
 if (found_app_alist()){
-	tabtitle[29] = new Array("", "Alist");
-}
-if (found_app_cloudflare()){
-	tabtitle[30] = new Array("", "CF域名解析");
+	tabtitle[27] = new Array("", "Alist");
 }
 if (found_app_bafa()){
 	tabtitle[28] = new Array("", "巴法云");
@@ -527,9 +522,6 @@ if (found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare()){
 }else if (found_app_ddnsto()){
 	ddnsto_array = new Array("","Advanced_ddnsto.asp");
 	tablink[16] = (ddnsto_array);
-}else if (found_app_wireguard()){
-	wireguard_array = new Array("","Advanced_wireguard.asp");
-	tablink[16] = (wireguard_array);
 }
 if (found_app_frp()){
 	frp_array = new Array("","Advanced_frp.asp");
@@ -567,29 +559,13 @@ if (found_app_easytier() || found_app_tailscale() || found_app_vntcli() || found
 	vpn_array = new Array("","Advanced_vpn.asp");
 	tablink[25] = (vpn_array);
 }
-if (found_app_vnts()){
-	vnts_array = new Array("","Advanced_vnts.asp");
-	tablink[25] = (vnts_array);
-}
-if (found_app_vntcli()){
-	vntcli_array = new Array("","Advanced_vnt.asp");
-	tablink[26] = (vntcli_array);
-}
 if (found_app_natpierce()){
 	natpierce_array = new Array("","Advanced_natpierce.asp");
 	tablink[26] = (natpierce_array);
 }
-if (found_app_tailscale()){
-	tailscale_array = new Array("","Advanced_tailscale.asp");
-	tablink[28] = (tailscale_array);
-}
 if (found_app_alist()){
 	alist_array = new Array("","Advanced_alist.asp");
 	tablink[27] = (alist_array);
-}
-if (found_app_easytier()){
-	easytier_array = new Array("","Advanced_easytier.asp");
-	tablink[31] = (easytier_array);
 }
 if (found_app_bafa()){
 	bafa_array = new Array("","Advanced_bafa.asp");
@@ -636,10 +612,8 @@ if (found_app_smartdns()){
 } else menuL2_title.push("");
 
 if (found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare()){
-	menuL2_title.push("DDNS服务");
+	menuL2_title.push("动态域名");
 } else if (found_app_ddnsto()){
-	menuL2_title.push("<#menu5_30#>");
-} else if (found_app_wireguard()){
 	menuL2_title.push("<#menu5_30#>");
 } else menuL2_title.push("");
 
@@ -729,8 +703,6 @@ if (found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare()){
 	menuL2_link.push(ddns_array[1]);
 } else if (found_app_ddnsto()){
 	menuL2_link.push(ddnsto_array[1]);
-} else if (found_app_wireguard()){
-	menuL2_link.push(wireguard_array[1]);
 } else menuL2_link.push("");
 if (found_app_frp()){
 	menuL2_link.push(frp_array[1]);
@@ -890,7 +862,7 @@ function show_menu(L1, L2, L3){
 
 	$("mainMenu").innerHTML = menu1_code;
 
-	/* subMenu 分两段顺序排列: ① 系统菜单项 ② 「扩展功能」分组(收纳所有插件项) */
+	/* subMenu 拆成两个 div: ① 系统菜单项 -> #subMenu  ② 扩展插件项 -> #subMenu1(自带「扩展功能」标题) */
 	var menu2_code_sys = '';
 	var menu2_code_ext = '';
 	for(var i = 1; i <= menuL2_title.length-1; ++i){
@@ -907,10 +879,34 @@ function show_menu(L1, L2, L3){
 			menu2_code_ext += item_code;
 	}
 	menu2_code = menu2_code_sys;
-	/* 没有任何扩展插件时, 分组标题也一并隐藏 */
-	if(menu2_code_ext != "")
-		menu2_code += '<div style="padding: 5px 8px; margin-top: 4px; font-weight: bold; color: #005580; border-top: 1px solid #ddd;"><i class="icon-th"></i>&nbsp;&nbsp;扩展功能</div>\n' + menu2_code_ext;
 	$("subMenu").innerHTML = menu2_code;
+
+	/* 扩展插件单独成一栏: <li id="option8">扩展功能</li> + <ul class="clearfix"><li><div id="subMenu1">条目 */
+	if(menu2_code_ext != ""){
+		var nav_ext = $("subMenu").parentNode;			/* div#subMenu */
+		nav_ext = nav_ext.parentNode;				/* li */
+		nav_ext = nav_ext.parentNode;				/* ul.clearfix */
+		nav_ext = nav_ext.parentNode;				/* div.side_nav */
+
+		var ext_title = document.createElement("li");
+		ext_title.id = "option8";
+		if(L2 > 10)
+			ext_title.className = "active";
+		ext_title.innerHTML = '<a href="javascript:;"><i class="icon-th"></i>&nbsp;&nbsp;扩展功能</a>';
+
+		var ext_ul = document.createElement("ul");
+		ext_ul.className = "clearfix";
+		var ext_li = document.createElement("li");
+		var ext_div = document.createElement("div");
+		ext_div.id = "subMenu1";
+		ext_div.className = "accordion";
+		ext_div.innerHTML = menu2_code_ext;
+		ext_li.appendChild(ext_div);
+		ext_ul.appendChild(ext_li);
+
+		nav_ext.appendChild(ext_title);
+		nav_ext.appendChild(ext_ul);
+	}
 
 	if(L3){
 		tab_code = '<ul class="nav nav-tabs" style="margin-bottom: 0px;">\n';

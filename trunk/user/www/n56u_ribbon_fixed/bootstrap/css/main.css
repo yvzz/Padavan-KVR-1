@@ -644,7 +644,7 @@ textarea[readonly] {
 
 @media screen and (max-width:800px){
 	#mainMenu .accordion{display:none}
-	#subMenu{display:block}
+	#subMenu,#subMenu1{display:block}
 	#loadingBlock{font-size:14px;}
 	.wrapper{width:100%}
 	.wrapper>.container-fluid,
@@ -660,8 +660,8 @@ textarea[readonly] {
 	#mainMenu li {float: left; width:50%}
 	#mainMenu li.active a,#mainMenu li:hover a{background: green;}
 	#mainMenu li a{display:block;line-height:30px;text-align:left;border-left:1px solid #ccc;}
-	#subMenu{clear:both;background:none}
-	#subMenu a{display:block;height:30px;overflow:hidden;float:left;width:33.3%;padding:0;line-height:30px}
+	#subMenu,#subMenu1{clear:both;background:none}
+	#subMenu a,#subMenu1 a{display:block;height:30px;overflow:hidden;float:left;width:33.3%;padding:0;line-height:30px}
 	.row-fluid .span9{float:none;width:auto;margin:0}
 	.row-fluid>.span2{float:none;width:auto;height:auto}
 	.row-fluid .span10{float:none;width:auto;margin:0}

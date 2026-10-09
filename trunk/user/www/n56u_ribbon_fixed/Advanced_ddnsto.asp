@@ -48,7 +48,6 @@ function initial(){
 function showmenu(){
 	showhide_div('allink', found_app_aliddns() || found_app_ddnspod() || found_app_cloudflare());
 	showhide_div('zelink', found_app_zerotier());
-	showhide_div('wirlink', found_app_wireguard());
 }
 
 function fill_status(status_code){
@@ -138,9 +137,6 @@ function done_validating(action){
 								<li id="zelink" style="display:none">
 								    <a href="Advanced_zerotier.asp"><#menu5_32_1#></a>
 								</li>
-								<li id="wirlink" style="display:none">
-								    <a href="Advanced_wireguard.asp"><#menu5_35_1#></a>
-								</li>			
 							    </ul>
 							</div>
 								<div class="row-fluid">
