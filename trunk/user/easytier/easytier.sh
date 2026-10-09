@@ -349,6 +349,10 @@ start_core() {
 		et_core=/tmp/var/easytier-core
   		nvram set easytier_bin=$et_core
     	fi
+	# 兜底重试: 先把守护条目写入 _opt_script_check, 再走下载/启动.
+	# 这样即使重启后下载失败、进程起不来, watchdog 也会每 80 秒重新 start 一次(含重下),
+	# 摆脱 et_restart 的 19 分钟长退避死角, 保证"开启状态重启后能自动拉起".
+	core_keep
 	get_tag
  	if [ -f "$et_core" ] ; then
 		[ ! -x "$et_core" ] && chmod +x $et_core
@@ -428,6 +432,8 @@ start_web() {
 		et_web_bin=/tmp/var/easytier-web
   		nvram set easytier_web_bin=$et_web_bin
     	fi
+	# 兜底重试: 与 start_core 同理, 先写守护条目, 下载失败也能被 watchdog 每 80 秒重试拉起
+	web_keep
      	
     	if [ -f "$et_web_bin" ] ; then
 		[ ! -x "$et_web_bin" ] && chmod +x $et_web_bin

@@ -93,7 +93,7 @@ function initial(){
                 <div class="row-fluid">
                     <div class="span12">
                         <div class="box well grad_colour_dark_blue">
-                            <h2 class="box_head round_top">日志- <#menu5_34_1#></h2>
+                            <h2 class="box_head round_top">日志- <#menu5_34_2#></h2>
                             <div class="round_bottom">
                                 <div class="row-fluid">
                                     <div id="tabMenu" class="submenuBlock"></div>

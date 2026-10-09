@@ -111,6 +111,11 @@ logger -t "自动启动" "正在启动EasyTier"
 /usr/bin/easytier.sh start &
 fi
 
+if [ $(nvram get npc_enable) = 1 ] ; then
+logger -t "自动启动" "正在启动NPC内网穿透"
+/usr/bin/npc.sh start &
+fi
+
 if [ $(nvram get wxsend_enable) = 1 ] || [ $(nvram get wxsend_enable) = 2 ] ; then
 logger -t "自动启动" "正在启动微信推送"
 /usr/bin/wxsend.sh start &
