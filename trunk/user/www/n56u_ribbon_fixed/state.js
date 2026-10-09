@@ -1776,7 +1776,6 @@ var w_vntcli = '<% nvram_get_x("", "w_vntcli"); %>';
 var w_natpierce = '<% nvram_get_x("", "w_natpierce"); %>';
 var w_tailscale = '<% nvram_get_x("", "w_tailscale"); %>';
 var w_alist = '<% nvram_get_x("", "w_alist"); %>';
-var w_cloudflare = '<% nvram_get_x("", "w_cloudflare"); %>';
 var w_easytier = '<% nvram_get_x("", "w_easytier"); %>';
 var w_bafa = '<% nvram_get_x("", "w_bafa"); %>';
 var w_virtualhere = '<% nvram_get_x("", "w_virtualhere"); %>';
@@ -1840,7 +1839,7 @@ if (w_pdnsd==0){
 	menuL2_link[16] = "";
 	menuL2_title[16] = "";
 }
-if (w_aliddns==0){
+if (w_aliddns==0){		// 17 动态域名(AliDDNS/DNSPod/CF 共用一页, 整页开关)
 	menuL2_link[17] = "";
 	menuL2_title[17] = "";
 }
@@ -1921,11 +1920,6 @@ if (w_virtualhere==0){	// 35 VirtualHere
 if (w_v2raya==0){		// 36 V2RayA
 	menuL2_link[36] = "";
 	menuL2_title[36] = "";
-}
-// cloudflare 无独立菜单项, 归属 17 动态域名组(与 w_aliddns 同位)
-if (w_cloudflare==0){
-	menuL2_link[17] = "";
-	menuL2_title[17] = "";
 }
 
 (function($){

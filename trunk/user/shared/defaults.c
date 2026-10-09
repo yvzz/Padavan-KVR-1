@@ -554,7 +554,6 @@ struct nvram_pair router_defaults[] = {
 	{ "w_natpierce", "1" },
 	{ "w_tailscale", "1" },
 	{ "w_alist", "1" },
-	{ "w_cloudflare", "1" },
 	{ "w_easytier", "1" },
 	{ "w_bafa", "1" },
 	{ "w_virtualhere", "1" },

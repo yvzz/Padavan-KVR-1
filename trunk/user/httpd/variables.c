@@ -1604,7 +1604,6 @@
 			{"w_natpierce", "", NULL, FALSE},
 			{"w_tailscale", "", NULL, FALSE},
 			{"w_alist", "", NULL, FALSE},
-			{"w_cloudflare", "", NULL, FALSE},
 			{"w_easytier", "", NULL, FALSE},
 			{"w_bafa", "", NULL, FALSE},
 			{"w_virtualhere", "", NULL, FALSE},

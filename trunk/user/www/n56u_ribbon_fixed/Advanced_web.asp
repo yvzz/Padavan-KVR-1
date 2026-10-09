@@ -53,7 +53,6 @@ $j(document).ready(function() {
 	init_itoggle('w_natpierce');
 	init_itoggle('w_tailscale');
 	init_itoggle('w_alist');
-	init_itoggle('w_cloudflare');
 	init_itoggle('w_easytier');
 	init_itoggle('w_bafa');
 	init_itoggle('w_virtualhere');
@@ -129,9 +128,6 @@ if (found_app_tailscale()){
 }
 if (found_app_alist()){
 	showhide_div('row_walist', true);
-}
-if (found_app_cloudflare()){
-	showhide_div('row_wcloudflare', true);
 }
 if (found_app_easytier()){
 	showhide_div('row_weasytier', true);
@@ -405,7 +401,7 @@ function applyRule(){
 											</td>
 										</tr>
 										<tr id="row_waliddns" style="display:none">
-											<th width="50%" >内网穿透</th>
+											<th width="50%" >动态域名</th>
 											<td>
 													<div class="main_itoggle">
 													<div id="w_aliddns_on_of">
@@ -597,20 +593,6 @@ function applyRule(){
 												<div style="position: absolute; margin-left: -10000px;">
 													<input type="radio" value="1" name="w_alist" id="w_alist_1" class="input" <% nvram_match_x("", "w_alist", "1", "checked"); %> /><#checkbox_Yes#>
 													<input type="radio" value="0" name="w_alist" id="w_alist_0" class="input" <% nvram_match_x("", "w_alist", "0", "checked"); %> /><#checkbox_No#>
-												</div>
-											</td>
-										</tr>
-										<tr id="row_wcloudflare" style="display:none">
-											<th width="50%" >CF域名解析</th>
-											<td>
-													<div class="main_itoggle">
-													<div id="w_cloudflare_on_of">
-														<input type="checkbox" id="w_cloudflare_fake" <% nvram_match_x("", "w_cloudflare", "1", "value=1 checked"); %><% nvram_match_x("", "w_cloudflare", "0", "value=0"); %>  />
-													</div>
-												</div>
-												<div style="position: absolute; margin-left: -10000px;">
-													<input type="radio" value="1" name="w_cloudflare" id="w_cloudflare_1" class="input" <% nvram_match_x("", "w_cloudflare", "1", "checked"); %> /><#checkbox_Yes#>
-													<input type="radio" value="0" name="w_cloudflare" id="w_cloudflare_0" class="input" <% nvram_match_x("", "w_cloudflare", "0", "checked"); %> /><#checkbox_No#>
 												</div>
 											</td>
 										</tr>

@@ -82,7 +82,11 @@ nvram_restore_defaults(void)
 	for (np = router_defaults; np->name; np++) {
 		if (restore_defaults || !nvram_get(np->name)) {
 			if (strstr(np->name,"wl_ssid") || strstr(np->name,"rt_ssid") || !strcmp(np->name,"wl_guest_ssid") || !strcmp(np->name,"rt_guest_ssid")){
-				sprintf(tmp, np->value, lan_mac);
+				/* SSID 模板含 %s 时才用 MAC 后四位填充, 纯机型名(无 %s)直接写入 */
+				if (strstr(np->value, "%s"))
+					sprintf(tmp, np->value, lan_mac);
+				else
+					strcpy(tmp, np->value);
 				nvram_set(np->name, tmp);
 			} else {
 				nvram_set(np->name, np->value);
