@@ -46,7 +46,7 @@ $j(document).ready(function() {
 
 function initial(){
 	show_banner(2);
-	show_menu(5, 29, 0);
+	show_menu(5, 27, 0);
 	show_footer();
 	fill_status(tailscaled_status());
 	fill_status2(tailscale_status());

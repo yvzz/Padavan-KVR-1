@@ -48,7 +48,7 @@ $j(document).ready(function() {
 
 function initial(){
 	show_banner(2);
-	show_menu(5, 26, 0);
+	show_menu(5, 29, 0);
 	show_footer();
 	fill_status(vnts_status());
 	change_vnts_enable(1);

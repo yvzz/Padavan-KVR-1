@@ -39,7 +39,7 @@ $j(document).ready(function() {
 
 function initial(){
 	show_banner(2);
-	show_menu(5,17,0);
+	show_menu(5,31,0);
 	showmenu();
 	show_footer();
 	if (!login_safe())

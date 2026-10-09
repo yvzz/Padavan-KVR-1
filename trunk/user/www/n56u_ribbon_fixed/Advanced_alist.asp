@@ -47,7 +47,7 @@ $j(document).ready(function() {
 
 function initial(){
 	show_banner(2);
-	show_menu(5, 28, 0);
+	show_menu(5, 33, 0);
 	show_footer();
 	fill_status(alist_status());
 	change_alist_enable();

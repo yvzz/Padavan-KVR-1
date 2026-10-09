@@ -47,7 +47,7 @@ $j(document).ready(function() {
 var isMenuopen = 0;
 function initial(){
 	show_banner(2);
-	show_menu(5, 31, 0);
+	show_menu(5, 26, 0);
 	show_footer();
 	fill_status(easytier_status());
 	fill_statusweb(easytier_web_status());

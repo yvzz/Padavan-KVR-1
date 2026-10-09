@@ -43,7 +43,7 @@ $j(document).ready(function() {
 var isMenuopen = 0;
 function initial(){
 	show_banner(2);
-	show_menu(5, 31, 0);
+	show_menu(5, 36, 0);
 	show_footer();
 	fill_status(v2raya_status());
 	change_v2raya_enable(1);

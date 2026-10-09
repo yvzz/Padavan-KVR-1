@@ -67,7 +67,7 @@ if(m_mapplist.length > 0){
 var isMenuopen = 0;
 function initial(){
 	show_banner(2);
-	show_menu(5, 27, 0);
+	show_menu(5, 28, 0);
 	showROUTEList();
 	showMAPPList();
 	show_footer();
