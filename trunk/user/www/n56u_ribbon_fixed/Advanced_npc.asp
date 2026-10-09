@@ -91,6 +91,7 @@ function change_npc_enable_bridge(mflag){
 	showhide_div("npc_compress_tr", m);
 	showhide_div("npc_crypt_tr", m);
 	showhide_div("npc_log_level_tr", m);
+	showhide_div("npc_version_tr", m);
 }
 
 </script>
@@ -234,12 +235,19 @@ function change_npc_enable_bridge(mflag){
 											<th width="30%" style="border-top: 0 none;"><a class="help_tooltip" href="javascript: void(0)" onmouseover="openTooltip(this, 26, 9);">日志级别:</a></th>
 											<td style="border-top: 0 none;">
 												<select name="npc_log_level" id="npc_log_level" class="input" style="width: 200px">
-													<option value="0" <% nvram_match_x("","npc_log_level", "0","selected"); %>>Emergency</option>
-													<option value="2" <% nvram_match_x("","npc_log_level", "2","selected"); %>>Critical</option>
-													<option value="3" <% nvram_match_x("","npc_log_level", "3","selected"); %>>Error</option>
-													<option value="4" <% nvram_match_x("","npc_log_level", "4","selected"); %>>Warning</option>
-													<option value="7" <% nvram_match_x("","npc_log_level", "7","selected"); %>>Debug</option>
+													<option value="0" <% nvram_match_x("","npc_log_level", "0","selected"); %>>紧急</option>
+													<option value="2" <% nvram_match_x("","npc_log_level", "2","selected"); %>>严重</option>
+													<option value="3" <% nvram_match_x("","npc_log_level", "3","selected"); %>>错误</option>
+													<option value="4" <% nvram_match_x("","npc_log_level", "4","selected"); %>>警告</option>
+													<option value="7" <% nvram_match_x("","npc_log_level", "7","selected"); %>>调试</option>
 												</select>
+											</td>
+										</tr>
+										<tr id="npc_version_tr" style="display:none;">
+											<th width="30%" style="border-top: 0 none;"><a class="help_tooltip" href="javascript: void(0)" onmouseover="openTooltip(this, 26, 9);">指定版本:</a></th>
+											<td style="border-top: 0 none;">
+												<input type="text" maxlength="30" class="input" size="20" id="npc_version" name="npc_version" placeholder="留空自动下载最新版" value="<% nvram_get_x("","npc_version"); %>" onkeypress="return is_string(this,event);" />
+												<span class="help-inline">留空 = 自动获取最新版；也可填指定版本如 v0.26.38</span>
 											</td>
 										</tr>
 										<tr id="row_post_wan_script">

@@ -1085,6 +1085,7 @@ struct nvram_pair router_defaults[] = {
 	{ "npc_compress", "1" },
 	{ "npc_crypt", "1" },
 	{ "npc_log_level", "3" },
+	{ "npc_version", "" },
 #endif
 
 #if defined(APP_DDNSTO)
