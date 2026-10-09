@@ -202,10 +202,17 @@ case "$ddnspod_ret_out" in
 		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   创建记录成功 -> $2.$1" ;;
 	*)
 		# 失败时把 ardnspod 的具体报错直接写进状态, 免得只能去翻系统日志
-		ddnspod_err="$(echo "$ddnspod_ret_out" | grep -o 'error: [^"]*' | head -n 1 | sed 's/error: //')"
-		[ -z "$ddnspod_err" ] && ddnspod_err="$(echo "$ddnspod_ret_out" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p' | head -n 1)"
-		[ -z "$ddnspod_err" ] && ddnspod_err="$(echo "$ddnspod_ret_out" | grep -v '^$' | tail -n 1)"
-		[ -z "$ddnspod_err" ] && ddnspod_err="未知错误"
+		case "$ddnspod_ret_out" in
+			*"No records on the list"*|*"arDdnsLookup - Operation successful"*)
+				# DNSPod api 调用成功(code=1)却查不到记录 id, 语义是"该主机记录不存在",
+				# 不是出错也不是 IP 无变化
+				ddnspod_err="解析记录不存在, 请检查域名与主机记录(自动创建未生效或创建失败)" ;;
+			*)
+				ddnspod_err="$(echo "$ddnspod_ret_out" | grep -o 'error: [^"]*' | head -n 1 | sed 's/error: //')"
+				[ -z "$ddnspod_err" ] && ddnspod_err="$(echo "$ddnspod_ret_out" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p' | head -n 1)"
+				[ -z "$ddnspod_err" ] && ddnspod_err="$(echo "$ddnspod_ret_out" | grep -v '^$' | tail -n 1)"
+				[ -z "$ddnspod_err" ] && ddnspod_err="未知错误" ;;
+		esac
 		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   更新失败: $(echo "$ddnspod_err" | cut -c1-80)" ;;
 esac
 }

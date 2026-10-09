@@ -288,6 +288,7 @@ arDdnsLookup() {
 
     local recordId
     local recordRs
+    local recordCd
 
     if [ "$2" != "@" ]; then
         # No sub_domain for root domain
@@ -297,14 +298,20 @@ arDdnsLookup() {
     # Get Record Id
     recordRs=$(arDdnsApi "Record.List" "domain=$1${subDomainRule}&record_type=$3")
     recordId=$(echo $recordRs | sed 's/.*"id":"\([0-9]*\)".*/\1/')
+    # DNSPod api code: "1"=调用成功(不代表查到了记录), 负数=鉴权/参数等真错误
+    recordCd=$(echo $recordRs | sed 's/.*{"code":"\([0-9-]*\)".*/\1/')
 
     if ! [ "$recordId" -gt 0 ] 2>/dev/null ;then
         errMsg=$(echo $recordRs | sed 's/.*"message":"\([^\"]*\)".*/\1/')
         arLog "> arDdnsLookup - $errMsg"
         if [ $arIsCreateRecord -eq 1 ]; then
-            # DNSPod 在记录不存在时常返回空 records 数组而非 message 字段,
-            # 只认 errMsg 的话"记录不存在时自动创建"永远走不到创建分支。
-            if [ "$errMsg" = "No records on the list" ]; then
+            # DNSPod 记录不存在有三种表现, 只认 message 会让"自动创建"永远走不到:
+            #   1) message = "No records on the list"
+            #   2) 返回空 records 数组(可能没有 message 字段)
+            #   3) message = "Operation successful"(code=1, api 调用成功但查不到记录 id)
+            #      这是最常见的一种, 语义是"记录不存在"而非"出错"
+            if [ "$errMsg" = "No records on the list" ] || [ "$recordCd" = "1" ]; then
+                arLog "> arDdnsLookup - No records on the list"
                 return 2
             fi
             if echo "$recordRs" | grep -q '"records":\[\]'; then
