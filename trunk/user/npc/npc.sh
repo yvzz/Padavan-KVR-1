@@ -1,17 +1,27 @@
 #!/bin/sh
 # npc (nps 客户端) 控制器
 # 二进制不编译进固件: 启用时按需从 GitHub Releases 下载, 支持指定版本(留空=最新版)
+#
+# 两条重要约定:
+# 1) 二进制默认放 /etc/storage/bin (flash), 而不是 /tmp
+#    - /tmp 是 tmpfs, 放进去的每 1MB 都等于多吃 1MB 内存, npc 二进制约 9M
+#    - 重启后 /tmp 清空, 每次开机都要重下, 容易和 5 分钟定时任务撞车形成下载风暴
+#    空间不足时自动回退 /tmp/npc
+# 2) 任何 start 都必须先干净地杀掉旧实例并等它真正退出
+#    新旧实例并存会吃光内存和线程, tokio 起不来线程会直接 panic
+#    (OS can't spawn worker thread: Resource temporarily unavailable, os error 11)
 
 NPC_REPO="yisier/nps"
 NPC_TARBALL="linux_mipsle_client.tar.gz"
 NPC_FALLBACK_VER="v0.26.38"
-NPC_DIR="/tmp/npc"
-NPC_BIN="$NPC_DIR/npc"
-NPC_VER_FILE="$NPC_DIR/npc.ver"
+NPC_BIN_DIR=""		# 由 npc_pick_dir 决定
+NPC_BIN=""		# 二进制完整路径
+NPC_VER_FILE=""		# 版本标记文件
+NPC_LOCK="/var/lock/npc.lock"
 # 标记: 用于把老固件遗留的 /etc/storage/npc_script.sh 迁移成新版本(只迁移一次)
 # 改动 npc_script.sh 逻辑时必须同步+1, 否则 /etc/storage 里的旧版不会被新版覆盖,
 # 页面上的"服务器地址/端口"等设置改了也不生效(实际执行的始终是旧脚本)
-NPC_SCRIPT_TAG="npc_script_v3"
+NPC_SCRIPT_TAG="npc_script_v4"
 
 npc_enable=`nvram get npc_enable`
 http_username=`nvram get http_username`
@@ -22,6 +32,105 @@ WGET_SSL=""
 if wget --help 2>&1 | grep -q "no-check-certificate" ; then
 	WGET_SSL="--no-check-certificate"
 fi
+
+# 操作互斥锁: autostart / 页面应用 / 5 分钟定时任务可能同时触发 npc_start,
+# 并发启动会拉起多个 npc 实例, 必须串行化
+npc_lock_try()
+{
+	if mkdir "$NPC_LOCK" 2>/dev/null ; then
+		date +%s > "$NPC_LOCK/ts"
+		return 0
+	fi
+	# 僵死保护: 持锁进程异常退出留下空锁时, 超过 240 秒强制接管
+	if [ -f "$NPC_LOCK/ts" ] ; then
+		_now=`date +%s`
+		_ts=`cat "$NPC_LOCK/ts" 2>/dev/null`
+		[ -n "$_ts" ] || return 1
+		[ "$_ts" -gt 0 ] 2>/dev/null || return 1
+		[ $((_now - _ts)) -gt 240 ] || return 1
+		rm -rf "$NPC_LOCK" 2>/dev/null
+		mkdir "$NPC_LOCK" 2>/dev/null || return 1
+		date +%s > "$NPC_LOCK/ts"
+		return 0
+	fi
+	return 1
+}
+
+npc_lock_release()
+{
+	rm -rf "$NPC_LOCK" 2>/dev/null
+}
+
+# npc 是否还活着. 排除僵尸: 僵尸已不占资源, 但 pidof 仍能看到,
+# 不排除会误判成"还在跑"而干等
+npc_alive()
+{
+	for _p in `pidof npc 2>/dev/null` ; do
+		[ "`awk '{print $3}' /proc/$_p/stat 2>/dev/null`" != "Z" ] && return 0
+	done
+	return 1
+}
+
+# 彻底停掉 npc 并等待真正退出(最多 15 秒)
+npc_kill_wait()
+{
+	_i=0
+	while [ $_i -lt 15 ] ; do
+		npc_alive || return 0
+		killall -9 npc 2>/dev/null
+		killall -9 npc_script.sh 2>/dev/null
+		sleep 1
+		_i=$((_i+1))
+	done
+	npc_alive && return 1
+	return 0
+}
+
+# 只保留一个实例(理论上不该出现多个, 出现就收敛, 避免内存/线程被吃光)
+npc_single_check()
+{
+	_pids=`pidof npc 2>/dev/null`
+	_cnt=0
+	_first=""
+	for _p in $_pids ; do
+		_cnt=$((_cnt+1))
+		[ $_cnt -eq 1 ] && _first=$_p
+	done
+	[ $_cnt -le 1 ] && return 0
+	logger -t "npc" "检测到 $_cnt 个 npc 实例, 只保留 PID $_first"
+	for _p in $_pids ; do
+		[ "$_p" = "$_first" ] || kill -9 "$_p" 2>/dev/null
+	done
+	return 0
+}
+
+# 选择二进制存放目录: 优先 /etc/storage/bin, 空间不足回退 /tmp/npc
+npc_pick_dir()
+{
+	_avail=0
+	NPC_BIN_DIR=""
+	for _d in /etc/storage/bin /tmp/npc ; do
+		mkdir -p "$_d" 2>/dev/null
+		[ -d "$_d" ] || continue
+		_avail=`df -k "$_d" 2>/dev/null | awk 'NR==2{print $4}'`
+		[ -n "$_avail" ] || _avail=0
+		# 约 16M: 二进制 ~9M + 压缩包 ~4M + 余量
+		[ "$_avail" -ge 16384 ] 2>/dev/null || continue
+		NPC_BIN_DIR="$_d"
+		break
+	done
+	[ -z "$NPC_BIN_DIR" ] && NPC_BIN_DIR="/tmp/npc"
+	NPC_BIN="$NPC_BIN_DIR/npc"
+	NPC_VER_FILE="$NPC_BIN_DIR/npc.ver"
+}
+
+npc_set_dir()
+{
+	NPC_BIN_DIR="$1"
+	NPC_BIN="$NPC_BIN_DIR/npc"
+	NPC_VER_FILE="$NPC_BIN_DIR/npc.ver"
+	mkdir -p "$NPC_BIN_DIR" 2>/dev/null
+}
 
 # 自愈/升级: /etc/storage/npc_script.sh 缺失, 或是老固件遗留下来的老版本(无标记)时从 /etc_ro 刷新
 if [ ! -s "/etc/storage/npc_script.sh" ] || ! grep -q "$NPC_SCRIPT_TAG" /etc/storage/npc_script.sh 2>/dev/null ; then
@@ -49,7 +158,7 @@ npc_latest_ver()
 {
 	_npc_tag=""
 	if [ -x /usr/bin/curl ]; then
-		_npc_tag=`curl -s -k --connect-timeout 5 https://api.github.com/repos/$NPC_REPO/releases/latest 2>/dev/null | grep '"tag_name"' | head -n1 | cut -d'"' -f4`
+		_npc_tag=`curl -s -k --connect-timeout 5 --max-time 15 https://api.github.com/repos/$NPC_REPO/releases/latest 2>/dev/null | grep '"tag_name"' | head -n1 | cut -d'"' -f4`
 	fi
 	if [ -z "$_npc_tag" ]; then
 		_npc_tag=`wget -q -T 5 -t 2 $WGET_SSL -O - https://api.github.com/repos/$NPC_REPO/releases/latest 2>/dev/null | grep '"tag_name"' | head -n1 | cut -d'"' -f4`
@@ -86,22 +195,22 @@ npc_ensure_bin()
 		fi
 	fi
 
-	mkdir -p $NPC_DIR
+	mkdir -p "$NPC_BIN_DIR" 2>/dev/null
 
 	# 已存在且版本一致, 无需重新下载
 	if [ -s "$NPC_BIN" ] && [ "`cat $NPC_VER_FILE 2>/dev/null`" = "$npc_dl_ver" ]; then
 		return 0
 	fi
 
-	logger -t "npc" "开始下载 npc $npc_dl_ver ..."
-	rm -f $NPC_BIN $NPC_DIR/npc.tar.gz
-	npc_dl "https://github.com/$NPC_REPO/releases/download/$npc_dl_ver/$NPC_TARBALL" "$NPC_DIR/npc.tar.gz"
-	if [ -s "$NPC_DIR/npc.tar.gz" ]; then
-		tar -xz -C $NPC_DIR -f $NPC_DIR/npc.tar.gz 2>/dev/null
-		rm -f $NPC_DIR/npc.tar.gz
+	logger -t "npc" "开始下载 npc $npc_dl_ver 到 $NPC_BIN_DIR ..."
+	rm -f $NPC_BIN $NPC_BIN_DIR/npc.tar.gz
+	npc_dl "https://github.com/$NPC_REPO/releases/download/$npc_dl_ver/$NPC_TARBALL" "$NPC_BIN_DIR/npc.tar.gz"
+	if [ -s "$NPC_BIN_DIR/npc.tar.gz" ]; then
+		tar -xz -C $NPC_BIN_DIR -f $NPC_BIN_DIR/npc.tar.gz 2>/dev/null
+		rm -f $NPC_BIN_DIR/npc.tar.gz
 		# 包内为 npc 与 conf/; 个别版本会多套一层 npc/ 目录
-		[ -f $NPC_DIR/nps/npc ] && mv -f $NPC_DIR/nps/npc $NPC_BIN
-		rm -rf $NPC_DIR/nps $NPC_DIR/conf
+		[ -f $NPC_BIN_DIR/nps/npc ] && mv -f $NPC_BIN_DIR/nps/npc $NPC_BIN
+		rm -rf $NPC_BIN_DIR/nps $NPC_BIN_DIR/conf
 	fi
 
 	if [ -s "$NPC_BIN" ]; then
@@ -113,34 +222,76 @@ npc_ensure_bin()
 	fi
 
 	nvram set npc_ver="下载失败"
-	logger -t "npc" "npc 下载失败(版本 $npc_dl_ver), 5 分钟后自动重试"
+	logger -t "npc" "npc 下载失败(版本 $npc_dl_ver), 稍后自动重试"
 	return 1
 }
 
-npc_start()
+# 实际启动(调用前已持锁)
+npc_start_locked()
 {
-	killall -9 npc npc_script.sh 2>/dev/null
-	npc_ensure_bin || return 1
+	# 先停干净: 旧实例没退完就起新的, 两者并存最容易出现 tokio 起线程失败
+	npc_kill_wait
+
+	npc_pick_dir
+	# 清掉另一处目录里的旧二进制, 免得 /tmp 里白留一份占内存
+	[ "$NPC_BIN_DIR" = "/etc/storage/bin" ] && rm -f /tmp/npc/npc /tmp/npc/npc.ver /tmp/npc/npc.tar.gz 2>/dev/null
+	rm -f "$NPC_BIN_DIR/npc.tar.gz" 2>/dev/null
+
+	if ! npc_ensure_bin ; then
+		# flash 上放不下就回退 /tmp 再试一次
+		if [ "$NPC_BIN_DIR" != "/tmp/npc" ] ; then
+			logger -t "npc" "$NPC_BIN_DIR 空间不足, 回退 /tmp/npc"
+			npc_set_dir "/tmp/npc"
+			npc_ensure_bin || return 1
+		else
+			return 1
+		fi
+	fi
+
 	if [ ! -s "/etc/storage/npc_script.sh" ]; then
 		logger -t "npc" "npc_script.sh 不存在, 无法启动"
 		return 1
 	fi
 	/etc/storage/npc_script.sh
-	sleep 1
+	sleep 2
+	# 兜底: 万一还是起了多个, 只留一个
+	npc_single_check
+
 	sed -i '/npc/d' /etc/storage/cron/crontabs/$http_username 2>/dev/null
 	cat >> /etc/storage/cron/crontabs/$http_username << EOF
 */5 * * * * /bin/sh /usr/bin/npc.sh C >/dev/null 2>&1
 EOF
-	[ ! -z "`pidof npc`" ] && logger -t "npc" "npc启动成功" || logger -t "npc" "npc启动失败, 请检查配置"
+	if npc_alive ; then
+		logger -t "npc" "npc启动成功 (`pidof npc | wc -w` 个实例)"
+		return 0
+	fi
+	logger -t "npc" "npc启动失败, 请检查配置"
+	return 1
+}
+
+npc_start()
+{
+	if ! npc_lock_try ; then
+		logger -t "npc" "已有 npc 操作在进行, 本次跳过(避免重复启动)"
+		return 1
+	fi
+	npc_start_locked
+	_rc=$?
+	npc_lock_release
+	return $_rc
 }
 
 npc_close()
 {
-	if [ ! -z "`pidof npc`" ]; then
-		killall -9 npc npc_script.sh 2>/dev/null
-		[ -z "`pidof npc`" ] && logger -t "npc" "已停止 npc"
+	if ! npc_lock_try ; then
+		logger -t "npc" "已有 npc 操作在进行, 本次跳过"
+		return 1
 	fi
+	npc_kill_wait
 	sed -i '/npc/d' /etc/storage/cron/crontabs/$http_username 2>/dev/null
+	logger -t "npc" "已停止 npc"
+	npc_lock_release
+	return 0
 }
 
 check_npc()
@@ -148,11 +299,11 @@ check_npc()
 	check_net
 	result_net=$?
 	if [ "$result_net" = "1" ] ;then
-		if [ -z "`pidof npc`" ] && [ "$npc_enable" = "1" ];then
+		if ! npc_alive && [ "$npc_enable" = "1" ];then
 			npc_start
 		fi
 	else
-		logger -t "npc" "npc断线重连"
+		logger -t "npc" "网络未就绪, 本次不重连"
 	fi
 }
 
