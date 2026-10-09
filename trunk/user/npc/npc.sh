@@ -9,7 +9,9 @@ NPC_DIR="/tmp/npc"
 NPC_BIN="$NPC_DIR/npc"
 NPC_VER_FILE="$NPC_DIR/npc.ver"
 # 标记: 用于把老固件遗留的 /etc/storage/npc_script.sh 迁移成新版本(只迁移一次)
-NPC_SCRIPT_TAG="npc_script_v2"
+# 改动 npc_script.sh 逻辑时必须同步+1, 否则 /etc/storage 里的旧版不会被新版覆盖,
+# 页面上的"服务器地址/端口"等设置改了也不生效(实际执行的始终是旧脚本)
+NPC_SCRIPT_TAG="npc_script_v3"
 
 npc_enable=`nvram get npc_enable`
 http_username=`nvram get http_username`
@@ -24,8 +26,11 @@ fi
 # 自愈/升级: /etc/storage/npc_script.sh 缺失, 或是老固件遗留下来的老版本(无标记)时从 /etc_ro 刷新
 if [ ! -s "/etc/storage/npc_script.sh" ] || ! grep -q "$NPC_SCRIPT_TAG" /etc/storage/npc_script.sh 2>/dev/null ; then
 	if [ -s "/etc_ro/npc_script.sh" ] ; then
+		# 升级前备份旧脚本, 万一用户手改过内容不至于丢失
+		[ -s "/etc/storage/npc_script.sh" ] && cp -f /etc/storage/npc_script.sh /etc/storage/npc_script.sh.bak
 		cp -f /etc_ro/npc_script.sh /etc/storage/npc_script.sh
 		chmod 755 /etc/storage/npc_script.sh
+		logger -t "npc" "npc_script.sh 已更新到 $NPC_SCRIPT_TAG (旧版备份为 npc_script.sh.bak)"
 	fi
 fi
 

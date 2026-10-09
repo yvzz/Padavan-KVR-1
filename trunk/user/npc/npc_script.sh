@@ -1,5 +1,5 @@
 #!/bin/sh
-# npc_script_v2
+# npc_script_v3
 # 生成 npc 配置并启动. 二进制由 /usr/bin/npc.sh 按需下载到 /tmp/npc/npc,
 # (老版本固件里此处是 /usr/bin/npc, 已随"不编译进固件"一起改掉)
 killall npc
@@ -21,8 +21,15 @@ compress=`nvram get npc_compress`
 crypt=`nvram get npc_crypt`
 Log_level=`nvram get npc_log_level`
 
+# 服务器地址: 已自带端口(形如 1.2.3.4:8284)时不再拼接 server_port,
+# 否则会拼出 "1.2.3.4:8284:8024" 这种双端口, npc 必然连不上
+case "$server_addr" in
+	*:*) server_full="$server_addr" ;;
+	*)   server_full="$server_addr:$server_port" ;;
+esac
+
 echo "[common]" >$tmpconf
-echo "server_addr=$server_addr:$server_port" >>$tmpconf
+echo "server_addr=$server_full" >>$tmpconf
 echo "conn_type=$protocol" >>$tmpconf
 echo "vkey=$vkey" >>$tmpconf
 echo "auto_reconnection=true" >>$tmpconf
@@ -46,6 +53,6 @@ if [ "$npc_enable" = "1" ] ; then
 		chmod 755 "$npc_bin"
 		cd /tmp/npc
 		"$npc_bin" -config=$tmpconf -log_level=$Log_level -log_path=$LOGFILE -debug=false >/dev/null 2>&1 &
-		logger -t "NPC" "npc 已启动, 服务器 $server_addr:$server_port"
+		logger -t "NPC" "npc 已启动, 服务器 $server_full"
 	fi
 fi
