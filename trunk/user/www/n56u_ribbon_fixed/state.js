@@ -1781,6 +1781,8 @@ var w_easytier = '<% nvram_get_x("", "w_easytier"); %>';
 var w_bafa = '<% nvram_get_x("", "w_bafa"); %>';
 var w_virtualhere = '<% nvram_get_x("", "w_virtualhere"); %>';
 var w_v2raya = '<% nvram_get_x("", "w_v2raya"); %>';
+var w_npc = '<% nvram_get_x("", "w_npc"); %>';
+var w_wireguard = '<% nvram_get_x("", "w_wireguard"); %>';
 
 if (w_ai==0){
 	menuL1_link[2] = "";
@@ -1874,45 +1876,56 @@ if (w_cloudflared==0){
 	menuL2_link[25] = "";
 	menuL2_title[25] = "";
 }
-if (w_vnts==0){
+// 以下下标必须与上方 menuL2_title/menuL2_link 的 push 顺序严格一一对应;
+// 增删插件菜单后务必同步本段, 否则"自定义菜单"开关会作用到错误的菜单项上。
+if (w_easytier==0){		// 26 EasyTier
 	menuL2_link[26] = "";
 	menuL2_title[26] = "";
 }
-if (w_vntcli==0){
+if (w_tailscale==0){	// 27 Tailscale
 	menuL2_link[27] = "";
 	menuL2_title[27] = "";
 }
-if (w_natpierce==0){
+if (w_vntcli==0){		// 28 VNT客户端
 	menuL2_link[28] = "";
 	menuL2_title[28] = "";
 }
-if (w_tailscale==0){
+if (w_vnts==0){			// 29 VNT服务端
 	menuL2_link[29] = "";
 	menuL2_title[29] = "";
 }
-if (w_alist==0){
+if (w_npc==0){			// 30 NPC内网穿透
 	menuL2_link[30] = "";
 	menuL2_title[30] = "";
 }
-if (w_cloudflare==0){
+if (w_wireguard==0){	// 31 WireGuard
 	menuL2_link[31] = "";
 	menuL2_title[31] = "";
 }
-if (w_easytier==0){
+if (w_natpierce==0){	// 32 皎月连
 	menuL2_link[32] = "";
 	menuL2_title[32] = "";
 }
-if (w_bafa==0){
+if (w_alist==0){		// 33 Alist
 	menuL2_link[33] = "";
 	menuL2_title[33] = "";
 }
-if (w_virtualhere==0){
+if (w_bafa==0){			// 34 巴法云
 	menuL2_link[34] = "";
 	menuL2_title[34] = "";
 }
-if (w_v2raya==0){
+if (w_virtualhere==0){	// 35 VirtualHere
 	menuL2_link[35] = "";
 	menuL2_title[35] = "";
+}
+if (w_v2raya==0){		// 36 V2RayA
+	menuL2_link[36] = "";
+	menuL2_title[36] = "";
+}
+// cloudflare 无独立菜单项, 归属 17 动态域名组(与 w_aliddns 同位)
+if (w_cloudflare==0){
+	menuL2_link[17] = "";
+	menuL2_title[17] = "";
 }
 
 (function($){

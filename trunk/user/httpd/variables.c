@@ -1609,6 +1609,8 @@
 			{"w_bafa", "", NULL, FALSE},
 			{"w_virtualhere", "", NULL, FALSE},
 			{"w_v2raya", "", NULL, FALSE},
+			{"w_npc", "", NULL, FALSE},
+			{"w_wireguard", "", NULL, FALSE},
 	};
 
 	struct variable variables_WLANConfig11b[] = {

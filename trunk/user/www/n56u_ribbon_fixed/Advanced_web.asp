@@ -58,6 +58,8 @@ $j(document).ready(function() {
 	init_itoggle('w_bafa');
 	init_itoggle('w_virtualhere');
 	init_itoggle('w_v2raya');
+	init_itoggle('w_npc');
+	init_itoggle('w_wireguard');
 
 });
 </script>
@@ -142,6 +144,12 @@ if (found_app_virtualhere()){
 }
 if (found_app_v2raya()){
 	showhide_div('row_wv2raya', true);
+}
+if (found_app_npc()){
+	showhide_div('row_wnpc', true);
+}
+if (found_app_wireguard()){
+	showhide_div('row_wwireguard', true);
 }
 
 }
@@ -659,6 +667,34 @@ function applyRule(){
 												<div style="position: absolute; margin-left: -10000px;">
 													<input type="radio" value="1" name="w_v2raya" id="w_v2raya_1" class="input" <% nvram_match_x("", "w_v2raya", "1", "checked"); %> /><#checkbox_Yes#>
 													<input type="radio" value="0" name="w_v2raya" id="w_v2raya_0" class="input" <% nvram_match_x("", "w_v2raya", "0", "checked"); %> /><#checkbox_No#>
+												</div>
+											</td>
+										</tr>
+										<tr id="row_wnpc" style="display:none">
+											<th width="50%" >NPC内网穿透</th>
+											<td>
+													<div class="main_itoggle">
+													<div id="w_npc_on_of">
+														<input type="checkbox" id="w_npc_fake" <% nvram_match_x("", "w_npc", "1", "value=1 checked"); %><% nvram_match_x("", "w_npc", "0", "value=0"); %>  />
+													</div>
+												</div>
+												<div style="position: absolute; margin-left: -10000px;">
+													<input type="radio" value="1" name="w_npc" id="w_npc_1" class="input" <% nvram_match_x("", "w_npc", "1", "checked"); %> /><#checkbox_Yes#>
+													<input type="radio" value="0" name="w_npc" id="w_npc_0" class="input" <% nvram_match_x("", "w_npc", "0", "checked"); %> /><#checkbox_No#>
+												</div>
+											</td>
+										</tr>
+										<tr id="row_wwireguard" style="display:none">
+											<th width="50%" >WireGuard</th>
+											<td>
+													<div class="main_itoggle">
+													<div id="w_wireguard_on_of">
+														<input type="checkbox" id="w_wireguard_fake" <% nvram_match_x("", "w_wireguard", "1", "value=1 checked"); %><% nvram_match_x("", "w_wireguard", "0", "value=0"); %>  />
+													</div>
+												</div>
+												<div style="position: absolute; margin-left: -10000px;">
+													<input type="radio" value="1" name="w_wireguard" id="w_wireguard_1" class="input" <% nvram_match_x("", "w_wireguard", "1", "checked"); %> /><#checkbox_Yes#>
+													<input type="radio" value="0" name="w_wireguard" id="w_wireguard_0" class="input" <% nvram_match_x("", "w_wireguard", "0", "checked"); %> /><#checkbox_No#>
 												</div>
 											</td>
 										</tr>
