@@ -195,9 +195,18 @@ case "$ddnspod_ret_out" in
 	*updated:*)
 		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   更新成功 -> $2.$1" ;;
 	*unchanged:*)
-		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   IP 无变化, 无需更新" ;;
+		# IP 无变化即记录值与当前 IP 已一致, 结果等同于成功, 不算失败
+		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   更新成功(IP 无变化, 无需更新) -> $2.$1" ;;
+	*created:*)
+		# 记录不存在时自动创建成功, 原先会漏判为失败
+		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   创建记录成功 -> $2.$1" ;;
 	*)
-		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   更新失败, 详见 系统日志" ;;
+		# 失败时把 ardnspod 的具体报错直接写进状态, 免得只能去翻系统日志
+		ddnspod_err="$(echo "$ddnspod_ret_out" | grep -o 'error: [^"]*' | head -n 1 | sed 's/error: //')"
+		[ -z "$ddnspod_err" ] && ddnspod_err="$(echo "$ddnspod_ret_out" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p' | head -n 1)"
+		[ -z "$ddnspod_err" ] && ddnspod_err="$(echo "$ddnspod_ret_out" | grep -v '^$' | tail -n 1)"
+		[ -z "$ddnspod_err" ] && ddnspod_err="未知错误"
+		nvram set ddnspod_last_act="`date "+%Y-%m-%d %H:%M:%S"`   更新失败: $(echo "$ddnspod_err" | cut -c1-80)" ;;
 esac
 }
 

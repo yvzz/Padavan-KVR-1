@@ -287,6 +287,7 @@ arDdnsLookup() {
     local errMsg
 
     local recordId
+    local recordRs
 
     if [ "$2" != "@" ]; then
         # No sub_domain for root domain
@@ -294,14 +295,20 @@ arDdnsLookup() {
     fi
 
     # Get Record Id
-    recordId=$(arDdnsApi "Record.List" "domain=$1${subDomainRule}&record_type=$3")
-    recordId=$(echo $recordId | sed 's/.*"id":"\([0-9]*\)".*/\1/')
+    recordRs=$(arDdnsApi "Record.List" "domain=$1${subDomainRule}&record_type=$3")
+    recordId=$(echo $recordRs | sed 's/.*"id":"\([0-9]*\)".*/\1/')
 
     if ! [ "$recordId" -gt 0 ] 2>/dev/null ;then
-        errMsg=$(echo $recordId | sed 's/.*"message":"\([^\"]*\)".*/\1/')
+        errMsg=$(echo $recordRs | sed 's/.*"message":"\([^\"]*\)".*/\1/')
         arLog "> arDdnsLookup - $errMsg"
         if [ $arIsCreateRecord -eq 1 ]; then
+            # DNSPod 在记录不存在时常返回空 records 数组而非 message 字段,
+            # 只认 errMsg 的话"记录不存在时自动创建"永远走不到创建分支。
             if [ "$errMsg" = "No records on the list" ]; then
+                return 2
+            fi
+            if echo "$recordRs" | grep -q '"records":\[\]'; then
+                arLog "> arDdnsLookup - No records on the list"
                 return 2
             fi
         fi
