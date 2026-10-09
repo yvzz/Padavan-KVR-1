@@ -2,7 +2,9 @@
 
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 ald_renum=`nvram get ald_renum`
 
 ald_restart () {
@@ -59,21 +61,22 @@ dl_ald() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/messense/aliyundrive-webdav/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/messense/aliyundrive-webdav/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/messense/aliyundrive-webdav/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/messense/aliyundrive-webdav/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/messense/aliyundrive-webdav/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/messense/aliyundrive-webdav/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
         [ -z "$tag" ] && tag="v2.3.3"
 	if [ ! -z "$tag" ] ; then
 		logger -t "【阿里云盘】" "下载 $tag 下载较慢，耐心等待"
   		ali_path=$(dirname "$aliyun")
 		[ ! -d "$ali_path" ] && mkdir -p "$ali_path"
- 		for proxy in $github_proxys ; do
+ 		for proxy in $github_proxys DIRECT ; do
+ 			[ "$proxy" = "DIRECT" ] && proxy=""
    		length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/messense/aliyundrive-webdav/releases/download/${tag}/aliyundrive-webdav-${tag}.mipsel-unknown-linux-musl.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  		length=`expr $length + 512000`
 		length=`expr $length / 1048576`
  		ald_size0="$(check_disk_size $ali_path)"
  		[ ! -z "$length" ] && logger -t "【阿里云盘】" "压缩包大小 ${length}M， 程序路径可用空间 ${ald_size0}M "
-       		curl -Lko "/tmp/aliyundrive/aliyundrive.tar.gz" "${proxy}https://github.com/messense/aliyundrive-webdav/releases/download/${tag}/aliyundrive-webdav-${tag}.mipsel-unknown-linux-musl.tar.gz" || wget --no-check-certificate -O "/tmp/aliyundrive/aliyundrive.tar.gz" "${proxy}https://github.com/messense/aliyundrive-webdav/releases/download/${tag}/aliyundrive-webdav-${tag}.mipsel-unknown-linux-musl.tar.gz"
+       		curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/aliyundrive/aliyundrive.tar.gz" "${proxy}https://github.com/messense/aliyundrive-webdav/releases/download/${tag}/aliyundrive-webdav-${tag}.mipsel-unknown-linux-musl.tar.gz" || wget --no-check-certificate -T 30 -O "/tmp/aliyundrive/aliyundrive.tar.gz" "${proxy}https://github.com/messense/aliyundrive-webdav/releases/download/${tag}/aliyundrive-webdav-${tag}.mipsel-unknown-linux-musl.tar.gz"
 			if [ "$?" = 0 ] ; then
 				tar -xzvf /tmp/aliyundrive/aliyundrive.tar.gz -C $ali_path
 				rm -rf /tmp/aliyundrive/aliyundrive.tar.gz

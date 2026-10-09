@@ -11,7 +11,9 @@ lucky_extra=`nvram get lucky_extra`
 [ -z "$lucky_cmd" ] && lucky_cmd="/etc/storage/lucky"
 [ -z "$lucky_enable" ] && lucky_enable=0 && nvram set lucky_enable=0
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 logg  () {
   echo -e "\033[36;33m$(date +'%Y-%m-%d %H:%M:%S'):\033[0m\033[35;1m $1 \033[0m"
@@ -57,8 +59,8 @@ get_tag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/gdy666/lucky/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/gdy666/lucky/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/gdy666/lucky/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/gdy666/lucky/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/gdy666/lucky/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/gdy666/lucky/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logg "无法获取最新版本"
 	nvram set lucky_ver_n=$tag
@@ -101,13 +103,14 @@ lucky_dl() {
 	logg "如下载失败请在开机启动脚本里自定义下载地址 nvram set lucky_url=你的下载链接.tar.gz"
  	bin_path=$(dirname "$PROG")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+		[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${lk_url}" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	lucky_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logg "程序大小 ${length}M， 程序路径可用空间 ${lucky_size0}M "
-        curl -Lko "/tmp/lucky.tar.gz" "${lk_url}" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${lk_url}" || curl -Lko "/tmp/lucky.tar.gz" "${lk_url1}" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${lk_url1}" || curl -Lko "/tmp/lucky.tar.gz" "${lk_url2}" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${lk_url2}" || curl -Lko "/tmp/lucky.tar.gz" "${proxy}https://github.com/gdy666/lucky/releases/download/${tag}/lucky_${new_tag}_Linux_mipsle_softfloat.tar.gz" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${proxy}https://github.com/gdy666/lucky/releases/download/${tag}/lucky_${new_tag}_Linux_mipsle_softfloat.tar.gz"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/lucky.tar.gz" "${lk_url}" || wget --no-check-certificate -T 30 -O "/tmp/lucky.tar.gz" "${lk_url}" || curl -Lko "/tmp/lucky.tar.gz" "${lk_url1}" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${lk_url1}" || curl -Lko "/tmp/lucky.tar.gz" "${lk_url2}" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${lk_url2}" || curl -Lko "/tmp/lucky.tar.gz" "${proxy}https://github.com/gdy666/lucky/releases/download/${tag}/lucky_${new_tag}_Linux_mipsle_softfloat.tar.gz" || wget --no-check-certificate -O "/tmp/lucky.tar.gz" "${proxy}https://github.com/gdy666/lucky/releases/download/${tag}/lucky_${new_tag}_Linux_mipsle_softfloat.tar.gz"
 	if [ "$?" = 0 ] ; then
 		tar -xzf /tmp/lucky.tar.gz -C /tmp/var
 		

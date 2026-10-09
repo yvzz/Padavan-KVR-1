@@ -36,7 +36,7 @@ $j(document).ready(function() {
 
 function initial(){
     show_banner(2);
-    show_menu(5,34,0);
+    show_menu(5,33,0);
     fill_status(virtualhere_status());
     show_footer();
 	if (!login_safe())

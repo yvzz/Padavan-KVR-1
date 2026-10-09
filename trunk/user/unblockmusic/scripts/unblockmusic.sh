@@ -136,18 +136,21 @@ done
 }
 
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 
 dl_wyy() {
 	if [ ! -f "/usr/bin/UnblockNeteaseMusic" ]; then
 		logger -t "【音乐解锁】" "没有主程序，开始下载程序"
 		
-		for proxy in $github_proxys ; do
+		for proxy in $github_proxys DIRECT ; do
+			[ "$proxy" = "DIRECT" ] && proxy=""
   		length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/unblockmusic/UnblockNeteaseMusic" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  		length=`expr $length + 512000`
 		length=`expr $length / 1048576`
  		[ ! -z "$length" ] && logger -t "【音乐解锁】" "程序大小 ${length}M"
-		curl -L -k -o "/tmp/UnblockNeteaseMusic" --connect-timeout 10 --retry 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/unblockmusic/UnblockNeteaseMusic" || wget --no-check-certificate -O "/tmp/UnblockNeteaseMusic" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/unblockmusic/UnblockNeteaseMusic"
+		curl -L -k -o "/tmp/UnblockNeteaseMusic" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/unblockmusic/UnblockNeteaseMusic" || wget --no-check-certificate -T 30 -O "/tmp/UnblockNeteaseMusic" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/unblockmusic/UnblockNeteaseMusic"
 		if [ "$?" = 0 ] ; then
 			chmod +x /tmp/UnblockNeteaseMusic
 			if [ "$(($(/tmp/UnblockNeteaseMusic -h 2>&1 | wc -l)))" -gt 3 ] ; then

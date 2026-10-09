@@ -44,7 +44,7 @@ $j(document).ready(function() {
 
 function initial(){
 	show_banner(2);
-	show_menu(5,33,0);
+	show_menu(5,32,0);
 	fill_status(bafa_status());
 	show_footer();
 	if (!login_safe())

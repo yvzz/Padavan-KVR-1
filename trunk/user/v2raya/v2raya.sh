@@ -39,7 +39,9 @@ fi
 [ -z "$v2raya" ] && v2raya="/tmp/var/v2raya" && nvram set v2raya_bin=$v2raya
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 scriptfilepath=$(cd "$(dirname "$0")"; pwd)/$(basename $0)
 v2raya_renum=`nvram get v2raya_renum`
 
@@ -80,20 +82,21 @@ dowload_core() {
       		coretag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/v2fly/v2ray-core/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$coretag" ] && coretag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/v2fly/v2ray-core/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		coretag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/v2fly/v2ray-core/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$coretag" ] && coretag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/v2fly/v2ray-core/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		coretag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/v2fly/v2ray-core/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$coretag" ] && coretag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/v2fly/v2ray-core/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$coretag" ] && logger -t "【V2RayA】" "无法获取v2fly/v2ray-core最新版本，使用v5.29.3" && coretag="v5.29.3"
 	coreurl="https://github.com/v2fly/v2ray-core/releases/download/${coretag}/v2ray-linux-mips32le.zip"
 	logger -t "【V2RayA】" "开始下载 ${coreurl} "
 	[ -z "$github_proxys" ] && logger -t "【V2RayA】" "加速镜像地址为空.."
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+		[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}${coreurl}" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	core_size0="$(check_disk_size $v2raya_assetsdir)"
  	[ ! -z "$length" ] && logger -t "【V2RayA】" "程序大小 ${length}M， 程序路径可用空间 ${core_size0}M "
-        curl -Lko /tmp/v2ray-core.zip "${proxy}${coreurl}" || wget --no-check-certificate -O /tmp/v2ray-core.zip "${proxy}${coreurl}"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko /tmp/v2ray-core.zip "${proxy}${coreurl}" || wget --no-check-certificate -T 30 -O /tmp/v2ray-core.zip "${proxy}${coreurl}"
 	if [ "$?" = 0 ] ; then
  		unzip -o -j /tmp/v2ray-core.zip v2ray '*.dat' -d "$v2raya_assetsdir"
 		chmod +x "${v2raya_assetsdir}/v2ray"
@@ -117,8 +120,8 @@ get_tag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/v2rayA/v2rayA/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/v2rayA/v2rayA/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/v2rayA/v2rayA/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/v2rayA/v2rayA/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/v2rayA/v2rayA/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/v2rayA/v2rayA/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logger -t "【V2RayA】" "无法获取最新版本"
 	nvram set v2raya_ver_n=$tag
@@ -140,13 +143,14 @@ dowload_v2() {
 	url="https://github.com/v2rayA/v2rayA/releases/download/v${tag}/v2raya_linux_mips32le_${tag}"
 	logger -t "【V2RayA】" "开始下载 ${url} "
 	[ -z "$github_proxys" ] && logger -t "【V2RayA】" "加速镜像地址为空.."
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+		[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}${url}" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	v2_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【V2RayA】" "程序大小 ${length}M， 程序路径可用空间 ${v2_size0}M "
-        curl -Lko "$v2raya" "${proxy}${url}" || wget --no-check-certificate -O "$v2raya" "${proxy}${url}"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "$v2raya" "${proxy}${url}" || wget --no-check-certificate -T 30 -O "$v2raya" "${proxy}${url}"
 	if [ "$?" = 0 ] ; then
 		chmod +x $v2raya
 		if [[ "$($v2raya -h 2>&1 | wc -l)" -gt 3 ]]  ; then

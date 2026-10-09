@@ -37,6 +37,9 @@ $j(document).ready(function() {
 		return false;
 	});
 
+	/* 进入页面时按 URL hash 定位到对应页签(如 #sta 运行状态) */
+	showTab(window.location.hash);
+
 });
 
 </script>
@@ -44,7 +47,7 @@ $j(document).ready(function() {
 var isMenuopen = 0;
 function initial(){
 	show_banner(2);
-	show_menu(5, 32, 0);
+	show_menu(5, 31, 0);
 	show_footer();
 	fill_status(easytier_status());
 	fill_statusweb(easytier_web_status());
@@ -89,12 +92,20 @@ function showTab(curHash) {
 	window.location.hash = curHash;
 }
 
+/* 重新加载页面并保持当前页签(hash), 避免刷新后跳回默认的"基本设置"页签 */
+function reloadTab(hash){
+	if (window.location.hash != hash)
+		window.location.hash = hash;
+	window.location.reload();
+}
+
 function applyRule(){
 	showLoading();
 	
 	document.form.action_mode.value = " Apply ";
 	document.form.current_page.value = "/Advanced_easytier.asp";
-	document.form.next_page.value = "";
+	/* next_page 带回页签 hash, 避免应用后跳回默认的"基本设置"页签 */
+	document.form.next_page.value = "/Advanced_easytier.asp" + window.location.hash;
 	
 	document.form.submit();
 }
@@ -145,7 +156,7 @@ function clearLog(){
 		'next_host': 'Advanced_easytier.asp#log'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#log'); 
 		}, 3000);
 	});
 }
@@ -158,7 +169,7 @@ function button_et_peer(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -171,7 +182,7 @@ function button_et_connector(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -184,7 +195,7 @@ function button_et_stun(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -197,7 +208,7 @@ function button_et_route(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -210,7 +221,7 @@ function button_et_peer_center(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -223,7 +234,7 @@ function button_et_vpn_portal(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -236,7 +247,7 @@ function button_et_node(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -249,7 +260,7 @@ function button_et_proxy(){
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -262,7 +273,7 @@ function button_et_status() {
 		'next_host': 'Advanced_easytier.asp#sta'
 	}).always(function() {
 		setTimeout(function() {
-			location.reload(); 
+			reloadTab('#sta'); 
 		}, 3000);
 	});
 }
@@ -600,7 +611,7 @@ function button_etweb(){
 	</tr>
 	<tr>
 	<td width="15%" style="text-align: left; padding-bottom: 0px;">
-	<input type="button" onClick="location.reload()" value="刷新日志" class="btn btn-primary" style="width: 200px">
+	<input type="button" onClick="reloadTab('#log')" value="刷新日志" class="btn btn-primary" style="width: 200px">
 	</td>
 	<td width="15%" style="text-align: left; padding-bottom: 0px;">
 	<input type="button" onClick="location.href='easytier.log'" value="<#CTL_onlysave#>" class="btn btn-success" style="width: 200px">

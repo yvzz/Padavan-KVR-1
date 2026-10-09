@@ -4,7 +4,9 @@ PROG="$(nvram get zerotier_bin)"
 config_path="/etc/storage/zerotier-one"
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 scriptfilepath=$(cd "$(dirname "$0")"; pwd)/$(basename $0)
 zerotier_renum=`nvram get zerotier_renum`
 
@@ -224,8 +226,8 @@ get_zttag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --max-redirect=0 --output-document=-  https://api.github.com/repos/lmq8267/ZeroTierOne/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/lmq8267/ZeroTierOne/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/ZeroTierOne/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/ZeroTierOne/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/ZeroTierOne/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/ZeroTierOne/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logger -t "【zerotier】" "无法获取最新版本" && nvram set zerotier_ver_n="" 
 	nvram set zerotier_ver_n=$tag
@@ -254,13 +256,14 @@ dowload_zero() {
 	logger -t "【zerotier】" "开始下载 https://github.com/lmq8267/ZeroTierOne/releases/download/${tag}/zerotier-one 到 $PROG"
  	bin_path=$(dirname "$PROG")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+		[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/ZeroTierOne/releases/download/${tag}/zerotier-one" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
         length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	zt_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【zerotier】" "程序大小 ${length}M， 程序路径可用空间 ${zt_size0}M "
-	curl -Lko "$PROG" "${proxy}https://github.com/lmq8267/ZeroTierOne/releases/download/${tag}/zerotier-one" || wget --no-check-certificate -O "$PROG" "${proxy}https://github.com/lmq8267/ZeroTierOne/releases/download/${tag}/zerotier-one" || curl -Lkso "$PROG" "https://fastly.jsdelivr.net/gh/lmq8267/ZeroTierOne@master/install/${tag}/zerotier-one" || wget --no-check-certificate -q -O "$PROG" "https://fastly.jsdelivr.net/gh/lmq8267/ZeroTierOne@master/install/${tag}/zerotier-one"
+	curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "$PROG" "${proxy}https://github.com/lmq8267/ZeroTierOne/releases/download/${tag}/zerotier-one" || wget --no-check-certificate -T 30 -O "$PROG" "${proxy}https://github.com/lmq8267/ZeroTierOne/releases/download/${tag}/zerotier-one" || curl -Lkso "$PROG" "https://fastly.jsdelivr.net/gh/lmq8267/ZeroTierOne@master/install/${tag}/zerotier-one" || wget --no-check-certificate -q -O "$PROG" "https://fastly.jsdelivr.net/gh/lmq8267/ZeroTierOne@master/install/${tag}/zerotier-one"
 	if [ "$?" = 0 ] ; then
 		chmod +x $PROG
 		if [[ "$($PROG -h 2>&1 | wc -l)" -gt 2 ]] ; then

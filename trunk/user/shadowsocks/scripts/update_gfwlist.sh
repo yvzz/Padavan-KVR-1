@@ -1,7 +1,9 @@
 #!/bin/sh
 
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 scriptname=$(basename $0)
 if [ ! -z "$scriptname" ] ; then
 	eval $(ps -w | grep "$scriptname" | grep -v $$ | grep -v grep | awk '{print "kill "$1";";}')
@@ -11,8 +13,9 @@ set -e -o pipefail
 [ "$1" != "force" ] && [ "$(nvram get ss_update_gfwlist)" != "1" ] && exit 0
 #GFWLIST_URL="$(nvram get gfwlist_url)"
 logger -st "gfwlist" "开始更新gfwlist  https://github.com/YW5vbnltb3Vz/domain-list-community/blob/release/gfwlist.txt"
-for proxy in $github_proxys ; do
-curl -L -k -S -o /tmp/gfwlist_list_origin.conf --connect-timeout 15 --retry 5 "${proxy}https://github.com/YW5vbnltb3Vz/domain-list-community/raw/refs/heads/release/gfwlist.txt" || wget --no-check-certificate -q -O /tmp/gfwlist_list_origin.conf "${proxy}https://github.com/YW5vbnltb3Vz/domain-list-community/raw/refs/heads/release/gfwlist.txt"
+for proxy in $github_proxys DIRECT ; do
+	[ "$proxy" = "DIRECT" ] && proxy=""
+curl -L -k -S -o /tmp/gfwlist_list_origin.conf --connect-timeout 15 --retry 5 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/YW5vbnltb3Vz/domain-list-community/raw/refs/heads/release/gfwlist.txt" || wget --no-check-certificate -q -O /tmp/gfwlist_list_origin.conf "${proxy}https://github.com/YW5vbnltb3Vz/domain-list-community/raw/refs/heads/release/gfwlist.txt"
 if [ "$?" = 0 ] ; then
 logger -st "gfwlist" "下载成功gfwlist.txt"
 break

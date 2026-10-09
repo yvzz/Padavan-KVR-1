@@ -4,7 +4,9 @@ PROG="$(nvram get cloudflared_bin)"
 [ -z "$PROG" ] && PROG=/tmp/cloudflared && nvram set cloudflared_bin=$PROG
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 CMD="$(nvram get cloudflared_cmd)"
 scriptfilepath=$(cd "$(dirname "$0")"; pwd)/$(basename $0)
 cloudflared_renum=`nvram get cloudflared_renum`
@@ -46,8 +48,8 @@ get_cftag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/lmq8267/cloudflared/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/lmq8267/cloudflared/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/cloudflared/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/cloudflared/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/cloudflared/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/cloudflared/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logger -t "【cloudflared】" "无法获取最新版本"
 	nvram set cloudflared_ver_n=$tag
@@ -67,13 +69,14 @@ dowload_cf() {
 	bin_path=$(dirname "$PROG")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
 	logger -t "【cloudflared】" "开始下载 https://github.com/lmq8267/cloudflared/releases/download/${tag}/cloudflared 到 $PROG"
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+		[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/cloudflared/releases/download/${tag}/cloudflared" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	cf_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【cloudflared】" "程序大小 ${length}M， 程序路径可用空间 ${cf_size0}M "
-        curl -Lko "$PROG" "${proxy}https://github.com/lmq8267/cloudflared/releases/download/${tag}/cloudflared" || wget --no-check-certificate -O "$PROG" "${proxy}https://github.com/lmq8267/cloudflared/releases/download/${tag}/cloudflared"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "$PROG" "${proxy}https://github.com/lmq8267/cloudflared/releases/download/${tag}/cloudflared" || wget --no-check-certificate -T 30 -O "$PROG" "${proxy}https://github.com/lmq8267/cloudflared/releases/download/${tag}/cloudflared"
 	if [ "$?" = 0 ] ; then
 		chmod +x $PROG
 		if [[ "$($PROG -h 2>&1 | wc -l)" -gt 3 ]] ; then

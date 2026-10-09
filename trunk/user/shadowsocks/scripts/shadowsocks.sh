@@ -34,7 +34,9 @@ lan_con=`nvram get lan_con`
 GLOBAL_SERVER=`nvram get global_server`
 socks=""
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 
 find_bin() {
 	case "$1" in
@@ -60,12 +62,13 @@ find_bin() {
 		[ ! -f "$ret" ] && [ -f "$etcxbin" ] && ret="$etcxbin" && echo "$(date "+%Y-%m-%d %H:%M:%S") : 找到$ret " >>/tmp/ssrplus.log
 		if [ ! -f "$ret" ]; then
 			echo "$(date "+%Y-%m-%d %H:%M:%S") : 未找到v2ray 开始在线下载... " >>/tmp/ssrplus.log
-			for proxy in $github_proxys ; do
+			for proxy in $github_proxys DIRECT ; do
+				[ "$proxy" = "DIRECT" ] && proxy=""
    				length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/v2ray/v2ray" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  				length=`expr $length + 512000`
 				length=`expr $length / 1048576`
  				[ ! -z "$length" ] && echo "$(date "+%Y-%m-%d %H:%M:%S") :程序大小 ${length}M"
-				curl -L -k -s -o "/tmp/v2ray" --connect-timeout 10 --retry 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/v2ray/v2ray" || wget --no-check-certificate -q -O "/tmp/v2ray" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/v2ray/v2ray"
+				curl -L -k -s -o "/tmp/v2ray" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/v2ray/v2ray" || wget --no-check-certificate -q -O "/tmp/v2ray" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/v2ray/v2ray"
 				if [ "$?" = 0 ] ; then
 					chmod +x /tmp/v2ray
 					if [ "$(($(/tmp/v2ray -h 2>&1 | wc -l)))" -gt 3 ] ; then
@@ -101,12 +104,13 @@ find_bin() {
 		[ ! -f "$ret" ] && [ -f "$etcxbin" ] && ret="$etcxbin" && echo "$(date "+%Y-%m-%d %H:%M:%S") : 找到$ret " >>/tmp/ssrplus.log
 		if [ ! -f "$ret" ]; then
 			echo "$(date "+%Y-%m-%d %H:%M:%S") : 未找到xray 开始在线下载... " >>/tmp/ssrplus.log
-			for proxy in $github_proxys ; do
+			for proxy in $github_proxys DIRECT ; do
+				[ "$proxy" = "DIRECT" ] && proxy=""
    				length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/xray/xray" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  				length=`expr $length + 512000`
 				length=`expr $length / 1048576`
  				[ ! -z "$length" ] && echo "$(date "+%Y-%m-%d %H:%M:%S") :程序大小 ${length}M"
-				curl -L -k -s -o "/tmp/xray" --connect-timeout 10 --retry 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/xray/xray" || wget --no-check-certificate -q -O "/tmp/xray" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/xray/xray"
+				curl -L -k -s -o "/tmp/xray" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/xray/xray" || wget --no-check-certificate -q -O "/tmp/xray" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/xray/xray"
 				if [ "$?" = 0 ] ; then
 					chmod +x /tmp/xray
 					if [ "$(($(/tmp/xray -h 2>&1 | wc -l)))" -gt 3 ] ; then
@@ -133,12 +137,13 @@ find_bin() {
 		[ ! -f "$ret" ] && [ -f "$etcbin" ] && ret="$etcbin" && echo "$(date "+%Y-%m-%d %H:%M:%S") : 找到$ret " >>/tmp/ssrplus.log
 		if [ ! -f "$ret" ]; then
 			echo "$(date "+%Y-%m-%d %H:%M:%S") : 未找到trojan 开始在线下载... " >>/tmp/ssrplus.log
-			for proxy in $github_proxys ; do
+			for proxy in $github_proxys DIRECT ; do
+				[ "$proxy" = "DIRECT" ] && proxy=""
    				length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/trojan/trojan" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  				length=`expr $length + 512000`
 				length=`expr $length / 1048576`
  				[ ! -z "$length" ] && echo "$(date "+%Y-%m-%d %H:%M:%S") :程序大小 ${length}M"
-				curl -L -k -s -o "/tmp/trojan" --connect-timeout 10 --retry 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/trojan/trojan" || wget --no-check-certificate -q -O "/tmp/trojan" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/trojan/trojan"
+				curl -L -k -s -o "/tmp/trojan" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/trojan/trojan" || wget --no-check-certificate -q -O "/tmp/trojan" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/trojan/trojan"
 				if [ "$?" = 0 ] ; then
 					chmod +x /tmp/trojan
 					if [ "$(($(/tmp/trojan -h 2>&1 | wc -l)))" -gt 3 ] ; then
@@ -446,7 +451,7 @@ EOF
 
 start_AD() {
 	mkdir -p /tmp/dnsmasq.dom
-	curl -k -s -o /tmp/adnew.conf --connect-timeout 10 --retry 3 $(nvram get ss_adblock_url)
+	curl -k -s -o /tmp/adnew.conf --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 $(nvram get ss_adblock_url)
 	if [ ! -f "/tmp/adnew.conf" ]; then
 		logger -t "SS" "AD文件下载失败，可能是地址失效或者网络异常！"
 	else

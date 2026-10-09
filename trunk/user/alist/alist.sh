@@ -38,7 +38,9 @@ repo="OpenListTeam/OpenList"
 [ ! -d /tmp/alist ] && mkdir -p /tmp/alist
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 scriptfilepath=$(cd "$(dirname "$0")"; pwd)/$(basename $0)
 alist_renum=`nvram get alist_renum`
 
@@ -79,8 +81,8 @@ get_tag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/${repo}/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/${repo}/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/${repo}/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/${repo}/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/${repo}/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/${repo}/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logger -t "【Alist】" "无法获取最新版本"
 	nvram set alist_ver_n=$tag
@@ -106,13 +108,14 @@ dowload_al() {
 	fi
 	logger -t "【Alist】" "开始下载 ${url} "
 	[ -z "$github_proxys" ] && logger -t "【Alist】" "加速镜像地址为空.."
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+		[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}${url}" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	alist_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【Alist】" "程序大小 ${length}M， 程序路径可用空间 ${alist_size0}M "
-        curl -Lko "/tmp/alist.tar.gz" "${proxy}${url}" || wget --no-check-certificate -O "/tmp/alist.tar.gz" "${proxy}${url}"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/alist.tar.gz" "${proxy}${url}" || wget --no-check-certificate -T 30 -O "/tmp/alist.tar.gz" "${proxy}${url}"
 	if [ "$?" = 0 ] ; then
 		logger -t "【Alist】" "开始解压..."
 		tar -xzf /tmp/alist.tar.gz -C $bin_path
