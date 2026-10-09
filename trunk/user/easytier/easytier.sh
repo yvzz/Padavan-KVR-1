@@ -34,6 +34,101 @@ logg() {
   logger -t "【EasyTier】" "$1"
 }
 
+# 限制 tokio 工作线程数: 默认按 CPU 核数起线程, 小内存路由器上线程栈一多
+# 就容易分配失败(EAGAIN), tokio 直接 panic:
+#   OS can't spawn worker thread: Resource temporarily unavailable (os error 11)
+[ -z "$TOKIO_WORKER_THREADS" ] && export TOKIO_WORKER_THREADS=2
+
+# 进程是否活着(排除僵尸: 僵尸已不占资源, 但 pidof 仍能看到,
+# 不排除会误判成"还在跑"而白等)
+et_alive() {
+	for _p in `pidof "$1" 2>/dev/null` ; do
+		[ "`awk '{print $3}' /proc/$_p/stat 2>/dev/null`" != "Z" ] && return 0
+	done
+	return 1
+}
+
+# 杀干净并等它真正退出(最多 15 秒). 只发信号不等, 新旧实例并存就是
+# 上面那个 tokio panic 的直接原因
+et_kill_wait() {
+	_i=0
+	while [ $_i -lt 15 ] ; do
+		et_alive "$1" || return 0
+		killall -9 "$1" >/dev/null 2>&1
+		sleep 1
+		_i=$((_i+1))
+	done
+	et_alive "$1" && return 1
+	return 0
+}
+
+# 只保留一个实例: 理论上不该出现多个, 出现就收敛, 免得内存/线程被吃光
+et_single_check() {
+	_pids=`pidof "$1" 2>/dev/null`
+	_cnt=0
+	_first=""
+	for _p in $_pids ; do
+		_cnt=$((_cnt+1))
+		[ $_cnt -eq 1 ] && _first=$_p
+	done
+	[ $_cnt -le 1 ] && return 0
+	logg "检测到 $_cnt 个 $1 实例, 只保留 PID $_first"
+	for _p in $_pids ; do
+		[ "$_p" = "$_first" ] || kill -9 "$_p" 2>/dev/null
+	done
+	return 0
+}
+
+# 选二进制目录: 优先 /etc/storage/bin (flash, 不占内存), 空间不足回退 /tmp/var.
+# /tmp 是 tmpfs, 放进去的二进制等于常驻内存(core 约 7M), 而且重启后必清空要重下
+et_pick_bin_dir() {
+	for _cand in /etc/storage/bin /tmp/var ; do
+		mkdir -p "$_cand" 2>/dev/null
+		[ -d "$_cand" ] || continue
+		_avail=$(df -k "$_cand" 2>/dev/null | awk 'NR==2{print $4}')
+		[ -n "$_avail" ] || _avail=0
+		[ "$_avail" -ge 20480 ] 2>/dev/null || continue
+		echo "$_cand"
+		return 0
+	done
+	echo "/tmp/var"
+}
+
+# 启动/重启互斥锁: 页面应用、autostart、watchdog 守护、失败重试都可能同时触发 start,
+# 并发启动正是多实例的来源. 240 秒或持锁进程已死时强制接管
+et_lock="/var/lock/easytier_start.lock"
+et_lock_try() {
+	if mkdir "$et_lock" 2>/dev/null ; then
+		date +%s > "$et_lock/ts"
+		echo $$ > "$et_lock/pid"
+		return 0
+	fi
+	_hold=$(cat "$et_lock/pid" 2>/dev/null)
+	if [ -n "$_hold" ] && [ ! -d "/proc/$_hold" ] ; then
+		rm -rf "$et_lock" 2>/dev/null
+		mkdir "$et_lock" 2>/dev/null || return 1
+		date +%s > "$et_lock/ts"
+		echo $$ > "$et_lock/pid"
+		return 0
+	fi
+	if [ -f "$et_lock/ts" ] ; then
+		_ts=$(cat "$et_lock/ts" 2>/dev/null)
+		_now=$(date +%s)
+		[ -n "$_ts" ] || return 1
+		[ "$_ts" -gt 0 ] 2>/dev/null || return 1
+		[ $((_now - _ts)) -gt 240 ] || return 1
+		rm -rf "$et_lock" 2>/dev/null
+		mkdir "$et_lock" 2>/dev/null || return 1
+		date +%s > "$et_lock/ts"
+		echo $$ > "$et_lock/pid"
+		return 0
+	fi
+	return 1
+}
+et_lock_release() {
+	rm -rf "$et_lock" 2>/dev/null
+}
+
 # 下载互斥锁: 用 mkdir 原子性抢锁, 防止多个 start_core/start_web 并发下载互相踩踏、耗尽小 /tmp.
 # 抢锁成功返回 0; 已有实例在下载则返回 1(调用方应直接退出, 等守护下次重试).
 dl_lock="/var/lock/easytier_dl.lock"
@@ -345,9 +440,12 @@ et_rules() {
 start_core() {
 	[ "$et_enable" = "0" ] && return 1
 	logg "正在启动easytier-core"
-  	if [ -z "$et_core" ] ; then
-		et_core=/tmp/var/easytier-core
+  	if [ -z "$et_core" ] || [ "${et_core#/tmp/}" != "$et_core" ] ; then
+		# 为空, 或仍是旧的 /tmp 默认路径(重启即丢失、常驻内存) -> 重选, 优先 flash
+		et_core="$(et_pick_bin_dir)/easytier-core"
   		nvram set easytier_bin=$et_core
+		# 迁到 flash 后清掉 /tmp 里的旧副本, 否则省内存的目的就落空了
+		[ "${et_core#/tmp/}" = "$et_core" ] && rm -f /tmp/var/easytier-core /tmp/var/easytier-cli 2>/dev/null
     	fi
 	# 兜底重试: 先把守护条目写入 _opt_script_check, 再走下载/启动.
 	# 这样即使重启后下载失败、进程起不来, watchdog 也会每 80 秒重新 start 一次(含重下),
@@ -371,7 +469,9 @@ start_core() {
 		dl_lock_release
   	fi
 	sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check
-	killall easytier-core >/dev/null 2>&1
+	# 先杀干净再起: 旧实例没退完就起新的, 两者并存会吃光内存/线程,
+	# tokio 建不出 worker 线程直接 panic (os error 11)
+	et_kill_wait easytier-core
 	bin_path=$(dirname "$et_core")
 	CMD=""
 	if [ "$et_enable" = "1" ] ; then
@@ -416,6 +516,8 @@ start_core() {
 	logg "运行${etcmd}"
 	eval "$etcmd" &
 	sleep 4
+	# 兜底: 万一还是起了多个(并发 start 等), 只留一个
+	et_single_check easytier-core
 	if [ ! -z "`pidof easytier-core`" ] ; then
  		mem=$(cat /proc/$(pidof easytier-core)/status | grep -w VmRSS | awk '{printf "%.1f MB", $2/1024}')
    		etcpu="$(top -b -n1 | grep -E "$(pidof easytier-core)" 2>/dev/null| grep -v grep | awk '{for (i=1;i<=NF;i++) {if ($i ~ /easytier-core/) break; else cpu=i}} END {print $cpu}')"
@@ -435,9 +537,11 @@ start_core() {
 start_web() {
 	[ "$et_web_enable" = "0" ] && return 1
 	logg "正在启动easytier-web"
-  	if [ -z "$et_web_bin" ] ; then
-		et_web_bin=/tmp/var/easytier-web
+  	if [ -z "$et_web_bin" ] || [ "${et_web_bin#/tmp/}" != "$et_web_bin" ] ; then
+		# 同上: 为空或仍是旧的 /tmp 路径时重选, 优先 flash
+		et_web_bin="$(et_pick_bin_dir)/easytier-web"
   		nvram set easytier_web_bin=$et_web_bin
+		[ "${et_web_bin#/tmp/}" = "$et_web_bin" ] && rm -f /tmp/var/easytier-web 2>/dev/null
     	fi
 	# 兜底重试: 与 start_core 同理, 先写守护条目, 下载失败也能被 watchdog 每 80 秒重试拉起
 	web_keep
@@ -460,6 +564,9 @@ start_web() {
 		dl_lock_release
   	fi
 	sed -Ei '/【EasyTier_web】|^$/d' /tmp/script/_opt_script_check
+	# 原来这里根本没杀旧进程, 每次 start 都会多堆一个 web 实例(web 内存占用更大),
+	# 是最容易把内存吃光的地方
+	et_kill_wait easytier-web
 	webCMD=""
 	if [ ! -z "$et_web_db" ] ; then 
  		wdb_path=$(dirname "$et_web_db")
@@ -487,6 +594,7 @@ start_web() {
 	logg "运行${etwcmd}"
 	eval "$etwcmd" &
 	sleep 4
+	et_single_check easytier-web
 	if [ ! -z "`pidof easytier-web`" ] ; then
  		wmem=$(cat /proc/$(pidof easytier-web)/status | grep -w VmRSS | awk '{printf "%.1f MB", $2/1024}')
    		etwcpu="$(top -b -n1 | grep -E "$(pidof easytier-web)" 2>/dev/null| grep -v grep | awk '{for (i=1;i<=NF;i++) {if ($i ~ /easytier-web/) break; else cpu=i}} END {print $cpu}')"
@@ -516,8 +624,20 @@ start_web() {
 }
 
 start_et() {
+	# 页面应用 / autostart / watchdog 守护 / 失败重试都可能同时触发 start,
+	# 并发启动会拉起多个实例 -> 内存和线程被吃光 -> tokio panic, 必须串行化.
+	# 用重入计数: et_restart 的重试是在本 shell 内递归调 start_et, 不能把自己挡在门外
+	ET_LOCK_DEPTH=$((ET_LOCK_DEPTH + 1))
+	if [ "$ET_LOCK_DEPTH" -eq 1 ] && ! et_lock_try ; then
+		logg "已有启动操作在进行, 本次跳过(避免多实例并存)"
+		ET_LOCK_DEPTH=$((ET_LOCK_DEPTH - 1))
+		return 1
+	fi
 	start_core
 	start_web
+	ET_LOCK_DEPTH=$((ET_LOCK_DEPTH - 1))
+	[ "$ET_LOCK_DEPTH" -le 0 ] && { ET_LOCK_DEPTH=0; et_lock_release; }
+	return 0
 }
 
 stop_et() {
@@ -532,6 +652,9 @@ stop_et() {
 	fi
 	killall easytier-core >/dev/null 2>&1
 	killall easytier-web >/dev/null 2>&1
+	# 等真正退出: 否则紧接着的 start 会和还没死的旧进程并存
+	et_kill_wait easytier-core
+	et_kill_wait easytier-web
 	if [ ! -z "$et_ports" ] ; then
 		et_portss=$(echo $et_ports | tr -d '\r')
 		for et_port in $et_portss ; do
