@@ -29,7 +29,9 @@ vntcli_disable_relay="$(nvram get vntcli_disable_relay)"
 
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 if [ ! -z "$vntcli_port" ] ; then
 	if [ ! -z "$(echo $vntcli_port | grep ',' )" ] ; then
 		vnt_tcp_port="${vntcli_port%%,*}"
@@ -76,8 +78,8 @@ get_tag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/lmq8267/vnt-cli/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/lmq8267/vnt-cli/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/vnt-cli/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/vnt-cli/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/vnt-cli/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/vnt-cli/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logger -t "【VNT客户端】" "无法获取最新版本"  
 	nvram set vntcli_ver_n=$tag
@@ -97,13 +99,15 @@ dowload_vntcli() {
 	bin_path=$(dirname "$VNTCLI")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
 	logger -t "【VNT客户端】" "开始下载 https://github.com/lmq8267/vnt-cli/releases/download/${tag}/vnt-cli_mipsel-unknown-linux-musl 到 $VNTCLI"
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+	[ "$proxy" = "DIRECT" ] && proxy=""
+	logger -t "【VNT客户端】" "尝试源: ${proxy:-直连}"
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/vnt-cli/releases/download/${tag}/vnt-cli_mipsel-unknown-linux-musl" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	vntcli_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【VNT客户端】" "程序大小 ${length}M， 程序路径可用空间 ${vntcli_size0}M "
-        curl -Lko "$VNTCLI" "${proxy}https://github.com/lmq8267/vnt-cli/releases/download/${tag}/vnt-cli_mipsel-unknown-linux-musl" || wget --no-check-certificate -O "$VNTCLI" "${proxy}https://github.com/lmq8267/vnt-cli/releases/download/${tag}/vnt-cli_mipsel-unknown-linux-musl"
+        curl -Lko "$VNTCLI" --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/vnt-cli/releases/download/${tag}/vnt-cli_mipsel-unknown-linux-musl" || wget --no-check-certificate -T 30 -O "$VNTCLI" "${proxy}https://github.com/lmq8267/vnt-cli/releases/download/${tag}/vnt-cli_mipsel-unknown-linux-musl"
 	if [ "$?" = 0 ] ; then
 		chmod +x $VNTCLI
 		if [[ "$($VNTCLI -h 2>&1 | wc -l)" -gt 3 ]] ; then
@@ -128,9 +132,12 @@ dowload_vntcli() {
 update_vntcli() {
 	get_tag
 	[ -z "$tag" ] && logger -t "【VNT客户端】" "无法获取最新版本" && exit 1
-	tag=$(echo $tag | tr -d 'v' | tr -d ' ' | tr -d '\n')
+	tag=$(echo $tag | tr -d ' ' | tr -d '\n')
+	# 比较版本时两侧都剥掉 v 前缀, 避免 "1.2.17" 与 "v1.2.17" 判为不等导致每次重启都重下
+	tag_cmp=$(echo $tag | tr -d 'v' | tr -d ' ' | tr -d '\n')
+	vntcli_ver_cmp=$(echo $vntcli_ver | tr -d 'v' | tr -d ' ' | tr -d '\n')
 	if [ ! -z "$tag" ] && [ ! -z "$vntcli_ver" ] ; then
-		if [ "$tag"x != "$vntcli_ver"x ] ; then
+		if [ "$tag_cmp"x != "$vntcli_ver_cmp"x ] ; then
 			logger -t "【VNT客户端】" "当前版本${vntcli_ver} 最新版本${tag}"
 			dowload_vntcli $tag
 		else

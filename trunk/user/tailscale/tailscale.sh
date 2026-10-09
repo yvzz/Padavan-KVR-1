@@ -16,7 +16,9 @@ tailscaled="$(nvram get tailscale_bin)"
 [ -z "$tailscaled" ] && tailscaled=/tmp/tailscaled && nvram set tailscale_bin=$tailscaled
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-[ -z "$github_proxys" ] && github_proxys=" "
+# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
+# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
+github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
 t_CMD="$(nvram get tailscale_cmd)"
 t2_CMD="$(nvram get tailscale_cmd2)"
 scriptfilepath=$(cd "$(dirname "$0")"; pwd)/$(basename $0)
@@ -60,8 +62,8 @@ get_tag() {
       		tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --output-document=-  https://api.github.com/repos/lmq8267/tailscale/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
 	 	[ -z "$tag" ] && tag="$( wget --no-check-certificate -T 5 -t 3 --user-agent "$user_agent" --quiet --output-document=-  https://api.github.com/repos/lmq8267/tailscale/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
     	else
-      		tag="$( curl -k --connect-timeout 3 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/tailscale/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
-       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/tailscale/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+      		tag="$( curl -k --connect-timeout 3 --max-time 8 --user-agent "$user_agent"  https://api.github.com/repos/lmq8267/tailscale/releases/latest 2>&1 | grep 'tag_name' | cut -d\" -f4 )"
+       	[ -z "$tag" ] && tag="$( curl -Lk --connect-timeout 3 --max-time 8 --user-agent "$user_agent" -s  https://api.github.com/repos/lmq8267/tailscale/releases/latest  2>&1 | grep 'tag_name' | cut -d\" -f4 )"
         fi
 	[ -z "$tag" ] && logger -t "【Tailscale】" "无法获取最新版本"
 	nvram set tailscale_ver_n=$tag
@@ -81,13 +83,15 @@ dowload_ts() {
 	bin_path=$(dirname "$tailscaled")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
 	logger -t "【Tailscale】" "开始下载 https://github.com/lmq8267/tailscale/releases/download/${tag}/tailscaled_full 到 $tailscaled"
-	for proxy in $github_proxys ; do
+	for proxy in $github_proxys DIRECT ; do
+	[ "$proxy" = "DIRECT" ] && proxy=""
+	logger -t "【Tailscale】" "尝试源: ${proxy:-直连}"
  	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/tailscale/releases/download/${tag}/tailscaled_full" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	tailscaled_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【Tailscale】" "程序大小 ${length}M， 程序路径可用空间 ${tailscaled_size0}M "
-        curl -Lko "$tailscaled" "${proxy}https://github.com/lmq8267/tailscale/releases/download/${tag}/tailscaled_full" || wget --no-check-certificate -O "$tailscaled" "${proxy}https://github.com/lmq8267/tailscale/releases/download/${tag}/tailscaled_full"
+        curl -Lko "$tailscaled" --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/tailscale/releases/download/${tag}/tailscaled_full" || wget --no-check-certificate -T 30 -O "$tailscaled" "${proxy}https://github.com/lmq8267/tailscale/releases/download/${tag}/tailscaled_full"
 	if [ "$?" = 0 ] ; then
 		chmod +x $tailscaled
   		if [[ "$($tailscaled -h 2>&1 | wc -l)" -gt 3 ]] ; then
@@ -113,7 +117,10 @@ update_ts() {
 	get_tag
 	[ -z "$tag" ] && logger -t "【Tailscale】" "无法获取最新版本" && exit 1
 	if [ ! -z "$tag" ] && [ ! -z "$ts_ver" ] ; then
-		if [ "$tag"x != "$ts_ver"x ] ; then
+		# 比较版本时两侧都剥掉 v 前缀, 避免 "1.104.1" 与 "v1.104.1" 判为不等导致每次重启都重下
+		tag_cmp=$(echo $tag | tr -d 'v' | tr -d ' ' | tr -d '\n')
+		ts_ver_cmp=$(echo $ts_ver | tr -d 'v' | tr -d ' ' | tr -d '\n')
+		if [ "$tag_cmp"x != "$ts_ver_cmp"x ] ; then
 			logger -t "【Tailscale】" "当前版本${ts_ver} 最新版本${tag}"
 			dowload_ts $tag
 		else
@@ -197,7 +204,7 @@ start_ts() {
   	fi
  	if [ ! -f "$tailscaled" ] ; then
 		logger -t "【Tailscale】" "主程序${tailscaled}不存在，开始在线下载..."
-  		[ -z "$tag" ] && tag="1.78.1"
+  		[ -z "$tag" ] && tag="v1.104.1"
   		dowload_ts $tag
   	fi
 	kill_ts
