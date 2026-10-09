@@ -456,17 +456,11 @@ if (found_app_wxsend()){
 if (found_app_cloudflared()){
 	tabtitle[24] = new Array("", "CloudFlared");
 }
-if (found_app_vnts()){
-	tabtitle[25] = new Array("", "VNT服务器");
-}
-if (found_app_vntcli()){
-	tabtitle[26] = new Array("", "VNT客户端");
+if (found_app_easytier() || found_app_tailscale() || found_app_vntcli() || found_app_vnts() || found_app_npc()){
+	tabtitle[25] = new Array("", "组网服务");
 }
 if (found_app_natpierce()){
-	tabtitle[27] = new Array("", "皎月连");
-}
-if (found_app_tailscale()){
-	tabtitle[28] = new Array("", "Tailscale");
+	tabtitle[26] = new Array("", "皎月连");
 }
 if (found_app_alist()){
 	tabtitle[29] = new Array("", "Alist");
@@ -474,17 +468,14 @@ if (found_app_alist()){
 if (found_app_cloudflare()){
 	tabtitle[30] = new Array("", "CF域名解析");
 }
-if (found_app_easytier()){
-	tabtitle[31] = new Array("", "EasyTier");
-}
 if (found_app_bafa()){
-	tabtitle[32] = new Array("", "巴法云");
+	tabtitle[28] = new Array("", "巴法云");
 }
 if (found_app_virtualhere()){
-	tabtitle[33] = new Array("", "VirtualHere");
+	tabtitle[29] = new Array("", "VirtualHere");
 }
 if (found_app_v2raya()){
-	tabtitle[34] = new Array("", "V2RayA");
+	tabtitle[30] = new Array("", "V2RayA");
 }
 
 //Level 3 Tab title
@@ -572,6 +563,10 @@ if (found_app_cloudflared()){
 	cloudflared_array = new Array("","Advanced_cloudflared.asp");
 	tablink[24] = (cloudflared_array);
 }
+if (found_app_easytier() || found_app_tailscale() || found_app_vntcli() || found_app_vnts() || found_app_npc()){
+	vpn_array = new Array("","Advanced_vpn.asp");
+	tablink[25] = (vpn_array);
+}
 if (found_app_vnts()){
 	vnts_array = new Array("","Advanced_vnts.asp");
 	tablink[25] = (vnts_array);
@@ -582,7 +577,7 @@ if (found_app_vntcli()){
 }
 if (found_app_natpierce()){
 	natpierce_array = new Array("","Advanced_natpierce.asp");
-	tablink[27] = (natpierce_array);
+	tablink[26] = (natpierce_array);
 }
 if (found_app_tailscale()){
 	tailscale_array = new Array("","Advanced_tailscale.asp");
@@ -590,7 +585,7 @@ if (found_app_tailscale()){
 }
 if (found_app_alist()){
 	alist_array = new Array("","Advanced_alist.asp");
-	tablink[29] = (alist_array);
+	tablink[27] = (alist_array);
 }
 if (found_app_easytier()){
 	easytier_array = new Array("","Advanced_easytier.asp");
@@ -598,19 +593,15 @@ if (found_app_easytier()){
 }
 if (found_app_bafa()){
 	bafa_array = new Array("","Advanced_bafa.asp");
-	tablink[32] = (bafa_array);
+	tablink[28] = (bafa_array);
 }
 if (found_app_virtualhere()){
 	virtualhere_array = new Array("","Advanced_virtualhere.asp");
-	tablink[33] = (virtualhere_array);
+	tablink[29] = (virtualhere_array);
 }
 if (found_app_v2raya()){
 	v2raya_array = new Array("","Advanced_v2raya.asp");
-	tablink[34] = (v2raya_array);
-}
-if (found_app_npc()){
-	npc_array = new Array("","Advanced_npc.asp");
-	tablink[35] = (npc_array);
+	tablink[30] = (v2raya_array);
 }
 
 //Level 2 Menu
@@ -684,28 +675,16 @@ if (found_app_cloudflared()){
 	menuL2_title.push("CloudFlared");
 } else menuL2_title.push("");
 
-if (found_app_vnts()){
-	menuL2_title.push("VNT服务器");
-} else menuL2_title.push("");
-
-if (found_app_vntcli()){
-	menuL2_title.push("VNT客户端");
+if (found_app_easytier() || found_app_tailscale() || found_app_vntcli() || found_app_vnts() || found_app_npc()){
+	menuL2_title.push("组网服务");
 } else menuL2_title.push("");
 
 if (found_app_natpierce()){
 	menuL2_title.push("皎月连");
 } else menuL2_title.push("");
 
-if (found_app_tailscale()){
-	menuL2_title.push("Tailscale");
-} else menuL2_title.push("");
-
 if (found_app_alist()){
 	menuL2_title.push("Alist");
-} else menuL2_title.push("");
-
-if (found_app_easytier()){
-	menuL2_title.push("EasyTier");
 } else menuL2_title.push("");
 
 if (found_app_bafa()){
@@ -718,10 +697,6 @@ if (found_app_virtualhere()){
 
 if (found_app_v2raya()){
 	menuL2_title.push("V2RayA");
-} else menuL2_title.push("");
-
-if (found_app_npc()){
-	menuL2_title.push("NPC内网穿透");
 } else menuL2_title.push("");
 
 menuL2_link  = new Array("", tablink[0][1], tablink[1][1], tablink[2][1], tablink[3][1], tablink[4][1], tablink[5][1], tablink[6][1], tablink[7][1], support_2g_radio() ? tablink[8][1] : "Main_EStatus_Content.asp", tablink[9][1]);
@@ -781,23 +756,15 @@ if (found_app_wxsend()){
 if (found_app_cloudflared()){
 	menuL2_link.push(cloudflared_array[1]);
 } else menuL2_link.push("");
-if (found_app_vnts()){
-	menuL2_link.push(vnts_array[1]);
-} else menuL2_link.push("");
-if (found_app_vntcli()){
-	menuL2_link.push(vntcli_array[1]);
+
+if (found_app_easytier() || found_app_tailscale() || found_app_vntcli() || found_app_vnts() || found_app_npc()){
+	menuL2_link.push(vpn_array[1]);
 } else menuL2_link.push("");
 if (found_app_natpierce()){
 	menuL2_link.push(natpierce_array[1]);
 } else menuL2_link.push("");
-if (found_app_tailscale()){
-	menuL2_link.push(tailscale_array[1]);
-} else menuL2_link.push("");
 if (found_app_alist()){
 	menuL2_link.push(alist_array[1]);
-} else menuL2_link.push("");
-if (found_app_easytier()){
-	menuL2_link.push(easytier_array[1]);
 } else menuL2_link.push("");
 if (found_app_bafa()){
 	menuL2_link.push(bafa_array[1]);
@@ -807,10 +774,6 @@ if (found_app_virtualhere()){
 } else menuL2_link.push("");
 if (found_app_v2raya()){
 	menuL2_link.push(v2raya_array[1]);
-} else menuL2_link.push("");
-
-if (found_app_npc()){
-	menuL2_link.push(npc_array[1]);
 } else menuL2_link.push("");
 
 //Level 1 Menu in Gateway, Router mode
@@ -927,14 +890,26 @@ function show_menu(L1, L2, L3){
 
 	$("mainMenu").innerHTML = menu1_code;
 
+	/* subMenu 分两段顺序排列: ① 系统菜单项 ② 「扩展功能」分组(收纳所有插件项) */
+	var menu2_code_sys = '';
+	var menu2_code_ext = '';
 	for(var i = 1; i <= menuL2_title.length-1; ++i){
 		if(menuL2_title[i] == "")
 			continue;
-		else if(L2 == i)
-			menu2_code += '<a href="javascript: void(0)" style="color: #005580; font-weight: bold"><i class="icon-minus"></i>&nbsp;&nbsp;'+menuL2_title[i]+'</a>\n';
+		var item_code;
+		if(L2 == i)
+			item_code = '<a href="javascript: void(0)" style="color: #005580; font-weight: bold"><i class="icon-minus"></i>&nbsp;&nbsp;'+menuL2_title[i]+'</a>\n';
 		else
-			menu2_code += '<a href="'+menuL2_link[i]+'"><i class="icon-minus"></i>&nbsp;&nbsp;'+menuL2_title[i]+'</a>\n';
+			item_code = '<a href="'+menuL2_link[i]+'"><i class="icon-minus"></i>&nbsp;&nbsp;'+menuL2_title[i]+'</a>\n';
+		if(i <= 10)
+			menu2_code_sys += item_code;
+		else
+			menu2_code_ext += item_code;
 	}
+	menu2_code = menu2_code_sys;
+	/* 没有任何扩展插件时, 分组标题也一并隐藏 */
+	if(menu2_code_ext != "")
+		menu2_code += '<div style="padding: 5px 8px; margin-top: 4px; font-weight: bold; color: #005580; border-top: 1px solid #ddd;"><i class="icon-th"></i>&nbsp;&nbsp;扩展功能</div>\n' + menu2_code_ext;
 	$("subMenu").innerHTML = menu2_code;
 
 	if(L3){

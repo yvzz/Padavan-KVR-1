@@ -219,6 +219,19 @@ endif
 endif
 endif
 
+# 组网服务(EasyTier/Tailscale/VNT客户端/VNT服务端/NPC 五页签合并页): 五者都没开时才删
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_EASYTIER),y)
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_TAILSCALE),y)
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_VNTCLI),y)
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_VNTS),y)
+ifneq ($(CONFIG_FIRMWARE_INCLUDE_NPC),y)
+	rm -f $(INSTALLDIR)/www/Advanced_vpn.asp
+endif
+endif
+endif
+endif
+endif
+
 ifneq ($(CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME),y)
 	rm -f $(INSTALLDIR)/www/Advanced_adguardhome.asp
 endif
