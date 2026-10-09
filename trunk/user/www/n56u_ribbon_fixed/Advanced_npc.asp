@@ -253,7 +253,7 @@ function change_npc_enable_bridge(mflag){
 										<tr id="row_post_wan_script">
 											<td colspan="2">
 												<i class="icon-hand-right"></i> <a href="javascript:spoiler_toggle('script2')"><span>npc启动脚本-不懂请不要乱改！！！</span></a>
-												<div id="script2">
+												<div id="script2" style="display:none;">
 													<textarea rows="18" wrap="off" spellcheck="false" maxlength="314571" class="span12" name="scripts.npc_script.sh" style="font-family:'Courier New'; font-size:12px;"><% nvram_dump("scripts.npc_script.sh",""); %></textarea>
 												</div>
 											</td>

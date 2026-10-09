@@ -109,8 +109,9 @@ function applyRule(){
 	showLoading();
 
 	document.form.action_mode.value = " Apply ";
-	document.form.current_page.value = "/Advanced_ddns.asp";
-	/* next_page 带回页签 hash, 避免应用后跳回默认页签 */
+	/* current_page 和 next_page 都带 hash: start_apply.htm 在 page_modified==1 时
+	   用 current_page 重定向, 不带 hash 会跳回默认页签(阿里DDNS) */
+	document.form.current_page.value = "/Advanced_ddns.asp" + window.location.hash;
 	document.form.next_page.value = "/Advanced_ddns.asp" + window.location.hash;
 
 	document.form.submit();

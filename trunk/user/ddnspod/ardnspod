@@ -297,7 +297,11 @@ arDdnsLookup() {
 
     # Get Record Id
     recordRs=$(arDdnsApi "Record.List" "domain=$1${subDomainRule}&record_type=$3")
-    recordId=$(echo $recordRs | sed 's/.*"id":"\([0-9]*\)".*/\1/')
+    # 只取 records 数组后的第一个 "id":"数字", 避免取到 domain.id.
+    # 原来的贪婪 sed `.*"id":"数字".*` 在记录不存在(空数组)时会取到 domain.id
+    # (它是 JSON 里唯一的 "id":"数字"), 导致 [ $recordId -gt 0 ] 为真,
+    # 跳过"记录不存在"判断, 拿 domain.id 去更新必然失败.
+    recordId=$(echo "$recordRs" | awk -F'"records":' '{print $2}' | sed 's/.*"id":"\([0-9]*\)".*/\1/')
     # DNSPod api code: "1"=调用成功(不代表查到了记录), 负数=鉴权/参数等真错误
     recordCd=$(echo $recordRs | sed 's/.*{"code":"\([0-9-]*\)".*/\1/')
 
