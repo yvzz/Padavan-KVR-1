@@ -202,6 +202,40 @@ get_tag() {
 	fi
 }
 
+# 带外部硬超时的下载: 不依赖 curl/wget 自身的 --max-time(它们在 busybox/代理源上行为不可靠,
+# 卡死时占死下载锁是"已有实例正在下载, 本次跳过"反复出现的直接原因). 后台跑下载 + 主进程计时,
+# 超时强制 kill 掉下载进程, 保证任何情况下都能在 $3 秒内返回.
+# 用法: et_dl_timeout <url> <out_file> <timeout秒>
+et_dl_timeout() {
+	_dl_url="$1"
+	_dl_out="$2"
+	_dl_timeout="${3:-60}"
+	rm -f "$_dl_out"
+	# 优先完整 curl(8.x 自带), 其次 busybox wget
+	if [ -x /usr/bin/curl ] ; then
+		curl -L -k --connect-timeout 15 -o "$_dl_out" "$_dl_url" 2>/dev/null &
+	else
+		wget --no-check-certificate -q -T 30 -O "$_dl_out" "$_dl_url" 2>/dev/null &
+	fi
+	_dl_pid=$!
+	_dl_wait=0
+	while [ $_dl_wait -lt $_dl_timeout ] ; do
+		# 下载进程已退出: 无论成功失败都立即返回
+		kill -0 "$_dl_pid" 2>/dev/null || break
+		sleep 1
+		_dl_wait=$((_dl_wait + 1))
+	done
+	# 超时仍未退出: 强制杀掉, 释放锁让后续源/watchdog 能继续
+	if kill -0 "$_dl_pid" 2>/dev/null ; then
+		kill -9 "$_dl_pid" 2>/dev/null
+		wait "$_dl_pid" 2>/dev/null
+		rm -f "$_dl_out"
+		return 1
+	fi
+	wait "$_dl_pid" 2>/dev/null
+	[ -s "$_dl_out" ]
+}
+
 # 官方源: EasyTier/EasyTier 的 easytier-linux-mipsel-<tag>.zip (内含 easytier-core / easytier-cli), 约 8.9M
 dowload_et_official() {
 	tag="$1"
@@ -211,7 +245,7 @@ dowload_et_official() {
 	for proxy in $github_proxys ; do
 	[ "$proxy" = "DIRECT" ] && proxy=""
 	url="${proxy}https://github.com/EasyTier/EasyTier/releases/download/${tag}/${zip_name}"
-	# 前置探测: 失效的加速站(连得上但转发不通)会卡满 --max-time, 先 6 秒短探测, 非 200 直接跳过
+	# 前置探测: 失效的加速站(连得上但转发不通)会卡满超时, 先 6 秒短探测, 非 200/302 直接跳过
 	[ -n "$proxy" ] && {
 		code=$(curl -sILk --connect-timeout 4 --max-time 6 -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
 		if [ "$code" != "200" ] && [ "$code" != "302" ]; then
@@ -219,21 +253,13 @@ dowload_et_official() {
 			continue
 		fi
 	}
-	# 实际测速: 下载前 3 秒抓取 256KB, 若 3 秒内达不到 ~50KB/s 说明该源是"连得上但龟速/半死",
-	# 会卡满下载超时把 /tmp 和下载锁占死(日志里"已有实例正在下载, 本次跳过"反复出现的元凶), 直接跳过
-	[ -n "$proxy" ] && {
-		_spd=$(curl -Lk --connect-timeout 4 --max-time 3 -o /dev/null -w "%{speed_download}" -r 0-262143 "$url" 2>/dev/null | cut -d. -f1)
-		if [ -n "$_spd" ] && [ "$_spd" -lt 51200 ] 2>/dev/null ; then
-			logg "源 ${proxy:-直连} 速度仅 ${_spd}B/s(龟速), 跳过"
-			continue
-		fi
-	}
 	logg "开始下载官方 $url"
-	# 不靠 curl 内部 --retry 反复卡死(最坏 90x4 秒把下载锁占满 240 秒), 失败立刻换源,
-	# 兜底交给 watchdog 每 80 秒重试. --speed-time 15 内 <1KB/s 即中断
-	curl -Lko /tmp/${zip_name} --connect-timeout 5 --max-time 45 --speed-limit 1024 --speed-time 15 "$url" || wget --no-check-certificate -T 30 -O /tmp/${zip_name} "$url"
-	if [ "$?" != 0 ] ; then
-		# 下载失败(返回码非 0): 清理残留, 换下一个源
+	# 外部硬超时 60 秒(8.9M 包在几十 KB/s 的代理源上也够下完), 超时/失败即换源,
+	# 兜底交给 watchdog 每 80 秒重试. 不再用 --speed-limit/--speed-time:
+	# 代理源"先拉取 GitHub 文件再转发"的长时间无数据阶段会被它误判中断, 反复重连卡死
+	et_dl_timeout "$url" "/tmp/${zip_name}" 60
+	if [ ! -s /tmp/${zip_name} ] ; then
+		# 下载失败: 清理残留, 换下一个源
 		logg "源 ${proxy:-直连} 下载失败, 换源重试"
 		rm -f /tmp/${zip_name}
 		continue
