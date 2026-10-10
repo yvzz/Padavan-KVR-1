@@ -112,8 +112,13 @@ logger -t "自动启动" "正在启动EasyTier"
 fi
 
 if [ $(nvram get npc_enable) = 1 ] ; then
+if [ $(nvram get easytier_enable) = 1 ] || [ $(nvram get easytier_enable) = 2 ] || [ $(nvram get easytier_web_enable) = 1 ] ; then
+logger -t "自动启动" "正在启动NPC内网穿透(延迟20秒, 避免与EasyTier并发下载)"
+( sleep 20 && /usr/bin/npc.sh start ) &
+else
 logger -t "自动启动" "正在启动NPC内网穿透"
 /usr/bin/npc.sh start &
+fi
 fi
 
 if [ $(nvram get wxsend_enable) = 1 ] || [ $(nvram get wxsend_enable) = 2 ] ; then

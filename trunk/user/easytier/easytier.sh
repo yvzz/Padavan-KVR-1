@@ -220,35 +220,49 @@ dowload_et_official() {
 	}
 	logg "开始下载官方 $url"
 	curl -Lko /tmp/${zip_name} --connect-timeout 5 --max-time 90 --retry 3 --retry-delay 2 --speed-limit 1024 --speed-time 15 "$url" || wget --no-check-certificate -T 30 -O /tmp/${zip_name} "$url"
-	if [ "$?" = 0 ] ; then
-		rm -rf /tmp/easytier_official
-		mkdir -p /tmp/easytier_official
-		unzip -o /tmp/${zip_name} -d /tmp/easytier_official
-		if [ -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core ] ; then
-			# 用 mv 而非 cp: 同分区内是 rename, 不额外占空间, 适配小容量 /tmp
-			mv -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core "$bin_path/easytier-core"
-			mv -f /tmp/easytier_official/easytier-linux-mipsel/easytier-cli "$bin_path/easytier-cli"
-			chmod +x "$bin_path/easytier-core" "$bin_path/easytier-cli"
-		fi
-		chmod +x $et_core
-		if [[ "$($et_core -h 2>&1 | wc -l)" -gt 3 ]] ; then
-			logg "$et_core 官方版本下载成功"
-			et_ver=$($et_core -V | awk '{print $2}' | tr -d ' ' | tr -d '\n')
-			if [ -z "$et_ver" ] ; then
-				nvram set easytier_ver=""
-			else
-				nvram set easytier_ver="v${et_ver}"
-			fi
-			rm -rf /tmp/${zip_name} /tmp/easytier_official
-			return 0
-		else
-			logg "官方版本不可用(可能与本机不兼容), 改用镜像源"
-			rm -f $et_core
-			rm -rf /tmp/${zip_name} /tmp/easytier_official
-		fi
-	else
-		# 下载失败(返回码非 0): 清理可能残留的半截文件, 再换下一个源
+	if [ "$?" != 0 ] ; then
+		# 下载失败(返回码非 0): 清理残留, 换下一个源
 		rm -f /tmp/${zip_name}
+		continue
+	fi
+	# 下载成功, 解压
+	rm -rf /tmp/easytier_official
+	mkdir -p /tmp/easytier_official
+	unzip -o /tmp/${zip_name} -d /tmp/easytier_official 2>/dev/null
+	if [ ! -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core ] ; then
+		# zip 内无此文件: 多半下到了错误页(HTML), 换源重试
+		logg "下载内容异常(zip 内未找到二进制), 换源重试"
+		rm -rf /tmp/${zip_name} /tmp/easytier_official
+		continue
+	fi
+	# 解压成功, 二进制就位
+	# 用 mv 而非 cp: 同分区内是 rename, 不额外占空间, 适配小容量 /tmp
+	mv -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core "$bin_path/easytier-core"
+	mv -f /tmp/easytier_official/easytier-linux-mipsel/easytier-cli "$bin_path/easytier-cli"
+	chmod +x "$bin_path/easytier-core" "$bin_path/easytier-cli"
+	# 测试能否运行: -h 输出 > 3 行才算正常
+	if [[ "$($et_core -h 2>&1 | wc -l)" -gt 3 ]] ; then
+		logg "$et_core 官方版本下载成功"
+		et_ver=$($et_core -V | awk '{print $2}' | tr -d ' ' | tr -d '\n')
+		if [ -z "$et_ver" ] ; then
+			nvram set easytier_ver=""
+		else
+			nvram set easytier_ver="v${et_ver}"
+		fi
+		# 下载+运行测试通过, 清除"版本不可用"标记
+		nvram set easytier_bin_bad=""
+		rm -rf /tmp/${zip_name} /tmp/easytier_official
+		return 0
+	else
+		# 二进制完整但跑不起来: 换任何源下载的都是同一个 release 同一个二进制,
+		# 重下只是浪费带宽和内存, 还会撑爆小 /tmp. 记住这个版本, 30 分钟内不再重下,
+		# 避免守护每 80 秒反复下载同一个跑不起来的版本形成死循环
+		logg "官方版本 $tag 无法运行(-h 测试失败), 不再换源重试(换源下载的二进制相同)"
+		nvram set easytier_bin_bad="$tag"
+		nvram set easytier_bin_bad_ts="$(date +%s)"
+		rm -f $et_core
+		rm -rf /tmp/${zip_name} /tmp/easytier_official
+		return 1
 	fi
 	done
 	return 1
@@ -463,8 +477,23 @@ start_core() {
 			return 1
 		fi
 		date +%s > "$dl_lock/ts"
-		logg "主程序${et_core}不存在，开始在线下载..."
   		[ -z "$tag" ] && tag="v2.6.4"
+		# 版本经测试无法运行时跳过下载(30 分钟内), 避免守护每 80 秒反复下载
+		# 同一个跑不起来的版本形成死循环. 超过 30 分钟自动解除(也许版本更新了)
+		_badtag="$(nvram get easytier_bin_bad)"
+		if [ -n "$_badtag" ] && [ "$_badtag" = "$tag" ] ; then
+			_badts="$(nvram get easytier_bin_bad_ts)"
+			_now="$(date +%s)"
+			if [ -n "$_badts" ] && [ $((_now - _badts)) -lt 1800 ] ; then
+				logg "版本 $tag 近期测试无法运行, 跳过下载(30分钟内不重试, 请在页面指定其他版本)"
+				dl_lock_release
+				return 1
+			else
+				nvram set easytier_bin_bad=""
+				nvram set easytier_bin_bad_ts=""
+			fi
+		fi
+		logg "主程序${et_core}不存在，开始在线下载..."
   		dowload_et $tag
 		dl_lock_release
   	fi
@@ -814,6 +843,9 @@ stop)
 	;;
 restart)
 	stop_et
+	# 用户手动重启: 清除"版本不可用"标记, 允许重新下载测试
+	nvram set easytier_bin_bad=""
+	nvram set easytier_bin_bad_ts=""
 	start_et &
 	;;
 update)
