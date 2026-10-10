@@ -586,7 +586,11 @@ start_core() {
 		[ "$et_log" = "5" ] && CMD="--console-log-level error"
 		CMD="-c /etc/storage/easytier.toml $CMD"
 	fi
-	etcmd="cd $bin_path ; ./easytier-core ${CMD} >/tmp/easytier.log 2>&1"
+	# 内联赋值 TOKIO_WORKER_THREADS: 不依赖 export 继承链(httpd system()/autostart & 的
+	# 父环境里可能已存在同名变量导致第40行的 [ -z ] 不生效), 直接钉死在启动命令上,
+	# 从根上避免 MT7621 按 CPU 核数起满线程 -> 栈分配失败 EAGAIN -> tokio panic (os error 11)
+	[ -z "$ET_WORKER_THREADS" ] && ET_WORKER_THREADS=2
+	etcmd="cd $bin_path ; TOKIO_WORKER_THREADS=$ET_WORKER_THREADS ./easytier-core ${CMD} >/tmp/easytier.log 2>&1"
 	echo "$etcmd" >/tmp/easytier.CMD 
 	logg "运行${etcmd}"
 	eval "$etcmd" &
