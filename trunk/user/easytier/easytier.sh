@@ -219,10 +219,22 @@ dowload_et_official() {
 			continue
 		fi
 	}
+	# 实际测速: 下载前 3 秒抓取 256KB, 若 3 秒内达不到 ~50KB/s 说明该源是"连得上但龟速/半死",
+	# 会卡满下载超时把 /tmp 和下载锁占死(日志里"已有实例正在下载, 本次跳过"反复出现的元凶), 直接跳过
+	[ -n "$proxy" ] && {
+		_spd=$(curl -Lk --connect-timeout 4 --max-time 3 -o /dev/null -w "%{speed_download}" -r 0-262143 "$url" 2>/dev/null | cut -d. -f1)
+		if [ -n "$_spd" ] && [ "$_spd" -lt 51200 ] 2>/dev/null ; then
+			logg "源 ${proxy:-直连} 速度仅 ${_spd}B/s(龟速), 跳过"
+			continue
+		fi
+	}
 	logg "开始下载官方 $url"
-	curl -Lko /tmp/${zip_name} --connect-timeout 5 --max-time 90 --retry 3 --retry-delay 2 --speed-limit 1024 --speed-time 15 "$url" || wget --no-check-certificate -T 30 -O /tmp/${zip_name} "$url"
+	# 不靠 curl 内部 --retry 反复卡死(最坏 90x4 秒把下载锁占满 240 秒), 失败立刻换源,
+	# 兜底交给 watchdog 每 80 秒重试. --speed-time 15 内 <1KB/s 即中断
+	curl -Lko /tmp/${zip_name} --connect-timeout 5 --max-time 45 --speed-limit 1024 --speed-time 15 "$url" || wget --no-check-certificate -T 30 -O /tmp/${zip_name} "$url"
 	if [ "$?" != 0 ] ; then
 		# 下载失败(返回码非 0): 清理残留, 换下一个源
+		logg "源 ${proxy:-直连} 下载失败, 换源重试"
 		rm -f /tmp/${zip_name}
 		continue
 	fi
@@ -743,6 +755,11 @@ stop_et() {
 	fi
 	killall easytier-core >/dev/null 2>&1
 	killall easytier-web >/dev/null 2>&1
+	# 一并终止卡死的下载进程(失效源上 curl 会卡满 --max-time 反复重试, 占死下载锁),
+	# 并释放下载锁: 否则"停止"后紧接着的 start 会一直报"已有实例正在下载, 本次跳过".
+	# 只杀命令行里带 EasyTier 的 curl/wget, 避免误伤 NPC/DDNS 等其他插件的下载
+	eval $(ps -w | grep -E "[c]url|[w]get" | grep -i "EasyTier" | awk '{print "kill "$1";"}')
+	dl_lock_release
 	# 等真正退出: 否则紧接着的 start 会和还没死的旧进程并存
 	et_kill_wait easytier-core
 	et_kill_wait easytier-web
