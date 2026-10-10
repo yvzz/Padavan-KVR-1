@@ -26,8 +26,13 @@ github_proxys="$(nvram get github_proxy)"
 mirror_url="$(nvram get mirror_url)"
 # 国内镜像仓库(如 Gitee/对象存储): 填"基地址", 脚本按"基地址+GitHub路径"拼 URL,
 # 与加速代理的"前缀+完整GitHub URL"模式不同。留空=不使用镜像。
-# 配置了就插到最前面优先尝试, 失败自动回退 GitHub/加速代理。
-[ -n "$mirror_url" ] && github_proxys="$mirror_url $github_proxys"
+# EasyTier 上游在国内 Gitee 同步了 release(easytier/EasyTier), 路径与 GitHub 完全一致,
+# 且 Gitee 对 owner 大小写不敏感(实测 /EasyTier/EasyTier/... 同样返回 200),
+# 因此把基地址换成 https://gitee.com/ 即可复用同一条路径, 无需任何目录改造。
+# 实测 9.4MB 约 4.6 秒(2MB/s), 远快于 GitHub 直连。
+# 顺序: 用户自定义镜像 -> 官方 Gitee 镜像 -> 加速代理 -> 直连, 404 由前置探测秒跳过。
+gh_mirrors="$mirror_url https://gitee.com/"
+github_proxys="$gh_mirrors $github_proxys"
 # 加速源: 只使用用户在「系统管理 -> 系统设置」页面自定义的 github_proxy(留空 = 直连官方),
 # 不再内置第三方加速站(多数已失效 HTTP 000, 逐个探测纯属浪费时间);
 # 末尾 DIRECT 为哨兵(循环中置空 = 直连), 保证自定义源失效时仍能下载.
@@ -287,12 +292,15 @@ dowload_et_official() {
 	zip_name="easytier-linux-mipsel-${tag}.zip"
 	for proxy in $github_proxys ; do
 	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	gh_base=""
 	if [ "$proxy" = "DIRECT" ] ; then
 		gh_base="https://github.com/"
-	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
-		gh_base="$mirror_url"
 	else
-		gh_base="${proxy}https://github.com/"
+		# 命中任一镜像基地址(用户自定义/官方 Gitee)则按"基地址+GitHub路径"拼
+		for _m in $gh_mirrors ; do
+			[ "$proxy" = "$_m" ] && { gh_base="$_m"; break; }
+		done
+		[ -z "$gh_base" ] && gh_base="${proxy}https://github.com/"
 	fi
 	[ "$proxy" = "DIRECT" ] && proxy=""
 	url="${gh_base}EasyTier/EasyTier/releases/download/${tag}/${zip_name}"
@@ -366,12 +374,15 @@ dowload_et_mirror() {
 	logg "开始下载镜像 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	for proxy in $github_proxys ; do
 	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	gh_base=""
 	if [ "$proxy" = "DIRECT" ] ; then
 		gh_base="https://github.com/"
-	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
-		gh_base="$mirror_url"
 	else
-		gh_base="${proxy}https://github.com/"
+		# 命中任一镜像基地址(用户自定义/官方 Gitee)则按"基地址+GitHub路径"拼
+		for _m in $gh_mirrors ; do
+			[ "$proxy" = "$_m" ] && { gh_base="$_m"; break; }
+		done
+		[ -z "$gh_base" ] && gh_base="${proxy}https://github.com/"
 	fi
 	[ "$proxy" = "DIRECT" ] && proxy=""
 	murl="${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
@@ -491,12 +502,15 @@ dowload_web() {
 	logg "开始下载 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	for proxy in $github_proxys ; do
 	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	gh_base=""
 	if [ "$proxy" = "DIRECT" ] ; then
 		gh_base="https://github.com/"
-	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
-		gh_base="$mirror_url"
 	else
-		gh_base="${proxy}https://github.com/"
+		# 命中任一镜像基地址(用户自定义/官方 Gitee)则按"基地址+GitHub路径"拼
+		for _m in $gh_mirrors ; do
+			[ "$proxy" = "$_m" ] && { gh_base="$_m"; break; }
+		done
+		[ -z "$gh_base" ] && gh_base="${proxy}https://github.com/"
 	fi
 	[ "$proxy" = "DIRECT" ] && proxy=""
  	length=$(wget --no-check-certificate -T 5 -t 3 "${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
