@@ -90,7 +90,14 @@ function initial(){
 				setTimeout("top_delay_redirect('"+current_page+"');", restart_time*1000);
 			}
 			else{
-				setTimeout("parent.parent.location.href = '"+current_page+"';", restart_time*1000);
+				// current_page 带 hash 时, 跳转 URL 与当前 URL 完全相同,
+				// 浏览器会优化跳过重载, 仅触发 hashchange 事件, 页面不重新加载,
+				// 用户看到"应用设置后页面不动". 用 location.reload() 强制重载并保留 hash.
+				// 不带 hash 时(其他页面如 EasyTier/NPC/Tailscale)保持原 location.href 行为.
+				if(current_page.indexOf("#") >= 0)
+					setTimeout("parent.parent.location.reload();", restart_time*1000);
+				else
+					setTimeout("parent.parent.location.href = '"+current_page+"';", restart_time*1000);
 			}
 		}
 	}
