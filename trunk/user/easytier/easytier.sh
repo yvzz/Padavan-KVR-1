@@ -666,6 +666,10 @@ start_et() {
 	start_web
 	ET_LOCK_DEPTH=$((ET_LOCK_DEPTH - 1))
 	[ "$ET_LOCK_DEPTH" -le 0 ] && { ET_LOCK_DEPTH=0; et_lock_release; }
+	# 通知其他启动项(如 NPC): 本轮 EasyTier 下载/启动流程已结束(无论成败),
+	# 可以让它们开始下载自己的二进制了. 关键目的: 避免 EasyTier 与 NPC 的二进制
+	# 同时在开机时往小 /tmp(tmpfs) 里塞, 把空间挤爆导致双双下载/启动失败
+	touch /var/run/easytier_ready 2>/dev/null
 	return 0
 }
 
