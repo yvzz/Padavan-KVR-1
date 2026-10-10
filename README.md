@@ -46,32 +46,56 @@ WiFi（默认 SSID 为机型名 `BOARD_PID`，**不带 MAC 后缀**）
 - 自定义增减插件：编辑对应机型的 `trunk/configs/templates/<机型>.config`，将 `CONFIG_FIRMWARE_INCLUDE_*` 开关改为 `y`/`n`。
 - ⚠️ 对 7612 无线芯片的支持已知有问题，含 7612 的机型（如 B70）无法正常工作。
 
-## 自定义菜单 / 内置插件
+## 自定义菜单 / 插件说明
 
-固件在 Web 管理界面「自定义菜单」页提供大量插件开关。**默认编译模板以精简为主，多数插件默认关闭**，可按需在 `.config` 模板或在线 Workflow 中开启。已接入的插件（二级菜单）包括：
+固件在 Web 管理界面「自定义菜单」页提供大量插件开关。本节区分两个常被混淆的概念：
+
+- **菜单已接入**：Web UI 上能看到的二级菜单项（由 `Advanced_web.asp` + `state.js` 注册）。
+- **默认编译进固件**：`.config` 模板里 `CONFIG_FIRMWARE_INCLUDE_*=y`，二进制/脚本随固件烧入。
+
+⚠️ **本仓库默认的 K2P 编译模板基本是精简的**：Web 二级菜单里看到的开关很多，但绝大多数插件在 `trunk/configs/templates/K2P.config` 里 **没有** 显式开启 `CONFIG_FIRMWARE_INCLUDE_*`，因此**默认编译出来的固件里很多插件不包含二进制**。需要在对应 `.config` 里把开关改为 `y`，或在 fork 后用 GitHub Actions 改 Workflow 的 `ENABLED_PLUGINS` 才会编入。
+
+下表对照「Web 二级菜单 ↔ 默认编译状态」，用于核对哪些默认可用、哪些需要手动开启：
 
 组网 / 内网穿透
 
-- EasyTier（P2P 虚拟局域网，Rust 实现）
-- Tailscale（WireGuard 系零配置组网）
-- VNT 客户端 / VNT 服务端
-- NPC 内网穿透（nps 客户端）
-- WireGuard
-- 皎月连（NAT 穿透）
-- FRP（frpc / frps）
-- 动态域名（阿里云 DDNS + DNSPod，支持记录自动创建）
+| 插件 | Web 菜单 | K2P 默认编译 | 说明 |
+| --- | --- | --- | --- |
+| EasyTier（P2P 虚拟局域网，Rust） | ✅ | ❌ 二进制运行期下载 | 首次启用自动下载到 `/tmp/easytier/` |
+| Tailscale（WireGuard 系零配置组网） | ✅ | ❌ 二进制运行期下载 | 同上 |
+| VNT 客户端（`vntcli`） | ✅ | ❌ 二进制运行期下载 | 同上 |
+| VNT 服务端（`vnts`） | ✅ | ❌ 二进制运行期下载 | 同上 |
+| NPC（nps 客户端，内网穿透） | ✅ | ❌ 二进制运行期下载 | 同上 |
+| WireGuard | ✅ | ❌ 内核模块编译关闭 | `CONFIG_FIRMWARE_INCLUDE_WIREGUARD=n`，需手动开 |
+| **皎月连（NAT 穿透）** | ✅ | ❌ 未编译 | `CONFIG_FIRMWARE_INCLUDE_NATPIERCE` 默认未设置 |
+| **FRP（frpc / frps）** | ✅ | ❌ 未编译 | `CONFIG_FIRMWARE_INCLUDE_FRPC=n` / `FRPS=n` |
+
+DNS / 动态域名
+
+| 插件 | Web 菜单 | K2P 默认编译 | 说明 |
+| --- | --- | --- | --- |
+| 阿里云 DDNS（`aliddns`） | ✅ | ❌ 需手动开 |
+| DNSPod DDNS（`ddnspod`） | ✅ | ❌ 需手动开 |
 
 网络工具 / 应用
 
-- Alist（网盘聚合）
-- 巴法云（IoT / MQTT）
-- VirtualHere（USB 共享）
-- V2RayA（代理）
-- Caddy、Cloudflared、阿里云盘 WebDAV、网易云解锁、UU 加速器、Lucky、微信推送
+| 插件 | Web 菜单 | K2P 默认编译 | 说明 |
+| --- | --- | --- | --- |
+| Alist（网盘聚合） | ✅ | ❌ 需手动开 |
+| 巴法云（IoT / MQTT，仓库 `bafa/`） | ✅ | ❌ 需手动开 |
+| VirtualHere（USB 共享） | ✅ | ❌ 需手动开 |
+| V2RayA（代理） | ✅ | ❌ 需手动开 |
+| Caddy / Cloudflared / 阿里云盘 WebDAV / 网易云解锁 / UU 加速器 / Lucky / 微信推送 | ✅ | ❌ 默认均未编译 | 仓库目录齐全，需手动翻 `.config` 开关 |
 
-其他
+其它
 
-- Shadowsocks、adbyby 广告屏蔽、pdnsd DNS 加速、MentoHust 校园网认证、TTYD 终端等
+- `K2P.config` 里默认开启的零碎工具：`TTYD`、`OpenSSH`、`tcpdump`、`curl`、`OpenVPN`、`xUPNPD`、`srelay`、`socat`、`MTR`、`htop`、`nano`、`iperf3`、`MiniEAP` 等。
+- Shadowsocks、pdnsd DNS 加速、MentoHust 校园网认证等老插件：源码在仓库，Web 菜单无独立开关，需自己加 `dir_y +=` 进 `trunk/user/Makefile`。
+
+如何快速检查一个插件当前是否编入了你的固件？
+
+- 在路由器上 `ls /usr/bin/ | grep -iE "插件名|二进制名"`，存在即编入。
+- 不存在 → 打开 Web 「自定义菜单」页，对应开关即便亮着也只代表 Web 标记，不会凭空变出二进制。
 
 ## 移除 WireGuard 内核模块（可选）
 
