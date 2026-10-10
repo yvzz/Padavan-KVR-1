@@ -1,9 +1,9 @@
 #!/bin/sh
 
 github_proxys="$(nvram get github_proxy)"
-# 多源兜底: 用户自定义的 github_proxy 优先, 后面始终追加内置加速站(实测可达的 3 个);
-# 循环末尾再追加 DIRECT 哨兵, 保证所有加速站都失效时仍会直连重试一次。
-github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/"
+# 加速源: 只使用用户在「系统管理 -> 系统设置」页面自定义的 github_proxy(留空 = 直连官方),
+# 不再内置第三方加速站(多数已失效 HTTP 000, 逐个探测纯属浪费时间);
+# 循环末尾的 DIRECT 哨兵保证自定义源失效时仍会直连重试一次。
 scriptname=$(basename $0)
 if [ ! -z "$scriptname" ] ; then
 	eval $(ps -w | grep "$scriptname" | grep -v $$ | grep -v grep | awk '{print "kill "$1";";}')

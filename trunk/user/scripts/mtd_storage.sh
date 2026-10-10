@@ -285,10 +285,12 @@ sync && echo 3 > /proc/sys/vm/drop_caches
 
 
 #**************github下载加速******************
-#建议自建加速，项目：https://github.com/hunshcn/gh-proxy
-#设置github加速下载镜像代理地址，失效请自行更换(按下方格式填写，每行一个，末尾加/)
-nvram set github_proxy="https://ghproxy.net/
-"
+#默认留空 = 直连官方, 不启用任何第三方加速源(内置加速站多数已失效)。
+#如需加速, 请到「系统管理 -> 系统设置」页面的 GitHub 下载加速源输入框填写,
+#或取消下方注释自行设置。自建加速项目: https://github.com/hunshcn/gh-proxy
+#填写格式: 每行一个, 末尾加 /(多个源用空格分隔也可以)
+#nvram set github_proxy="https://ghproxy.net/
+#"
 #*************github下载加速******************
 #**************替换背景图片******************
 #上传图片命名为wood.jpg到/etc/storage/bg/目录里即可，刷新浏览器缓存
