@@ -23,6 +23,11 @@ et_extra_args="$(nvram get easytier_extra_args)"
 [ -z "$et_web_api" ] && et_web_port=11211
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
+mirror_url="$(nvram get mirror_url)"
+# 国内镜像仓库(如 Gitee/对象存储): 填"基地址", 脚本按"基地址+GitHub路径"拼 URL,
+# 与加速代理的"前缀+完整GitHub URL"模式不同。留空=不使用镜像。
+# 配置了就插到最前面优先尝试, 失败自动回退 GitHub/加速代理。
+[ -n "$mirror_url" ] && github_proxys="$mirror_url $github_proxys"
 # 加速源: 只使用用户在「系统管理 -> 系统设置」页面自定义的 github_proxy(留空 = 直连官方),
 # 不再内置第三方加速站(多数已失效 HTTP 000, 逐个探测纯属浪费时间);
 # 末尾 DIRECT 为哨兵(循环中置空 = 直连), 保证自定义源失效时仍能下载.
@@ -281,8 +286,16 @@ dowload_et_official() {
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
 	zip_name="easytier-linux-mipsel-${tag}.zip"
 	for proxy in $github_proxys ; do
+	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	if [ "$proxy" = "DIRECT" ] ; then
+		gh_base="https://github.com/"
+	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+		gh_base="$mirror_url"
+	else
+		gh_base="${proxy}https://github.com/"
+	fi
 	[ "$proxy" = "DIRECT" ] && proxy=""
-	url="${proxy}https://github.com/EasyTier/EasyTier/releases/download/${tag}/${zip_name}"
+	url="${gh_base}EasyTier/EasyTier/releases/download/${tag}/${zip_name}"
 	# 前置探测: 失效的加速站(连得上但转发不通)会卡满超时, 先 6 秒短探测, 非 200/302 直接跳过
 	[ -n "$proxy" ] && {
 		code=$(curl -sILk --connect-timeout 4 --max-time 6 -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
@@ -352,8 +365,16 @@ dowload_et_mirror() {
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
 	logg "开始下载镜像 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	for proxy in $github_proxys ; do
+	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	if [ "$proxy" = "DIRECT" ] ; then
+		gh_base="https://github.com/"
+	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+		gh_base="$mirror_url"
+	else
+		gh_base="${proxy}https://github.com/"
+	fi
 	[ "$proxy" = "DIRECT" ] && proxy=""
-	murl="${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
+	murl="${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	# 前置探测: 失效加速站快速跳过, 不进入长下载卡满超时
 	[ -n "$proxy" ] && {
 		code=$(curl -sILk --connect-timeout 4 --max-time 6 -o /dev/null -w "%{http_code}" "$murl" 2>/dev/null)
@@ -384,13 +405,13 @@ dowload_et_mirror() {
 			fi
 			break
 		else
-			logg "下载不完整，请手动下载 ${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 解压上传到  $et_core"
+			logg "下载不完整，请手动下载 ${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 解压上传到  $et_core"
 			rm -f "$bin_path/easytier-core" "$bin_path/easytier-cli"
 		fi
 	else
 		# curl 管道解压失败, 回退 wget 落盘后解压
 		rm -f "$bin_path/easytier-core" "$bin_path/easytier-cli"
-		wget --no-check-certificate -T 30 -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" 2>/dev/null
+		wget --no-check-certificate -T 30 -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" 2>/dev/null
 		if [ -s /tmp/easytier-mipsel-linux-muslsf.tar.gz ] ; then
 			tar -xzf /tmp/easytier-mipsel-linux-muslsf.tar.gz -O easytier-core > "$bin_path/easytier-core"
 			tar -xzf /tmp/easytier-mipsel-linux-muslsf.tar.gz -O easytier-cli > "$bin_path/easytier-cli"
@@ -402,11 +423,11 @@ dowload_et_mirror() {
 				[ -z "$et_ver" ] && nvram set easytier_ver="" || nvram set easytier_ver="v${et_ver}"
 				break
 			else
-				logg "下载不完整，请手动下载 ${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 解压上传到  $et_core"
+				logg "下载不完整，请手动下载 ${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 解压上传到  $et_core"
 				rm -f "$bin_path/easytier-core" "$bin_path/easytier-cli"
 			fi
 		else
-			logg "下载失败，请手动下载 ${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 上传到  $et_core"
+			logg "下载失败，请手动下载 ${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 上传到  $et_core"
 			# 清理 wget 落盘残留的半截 tar 包, 避免小 /tmp 被占满
 			rm -f /tmp/easytier-mipsel-linux-muslsf.tar.gz
 		fi
@@ -469,13 +490,21 @@ dowload_web() {
 	[ ! -d "$webbin_path" ] && mkdir -p "$webbin_path"
 	logg "开始下载 https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	for proxy in $github_proxys ; do
+	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	if [ "$proxy" = "DIRECT" ] ; then
+		gh_base="https://github.com/"
+	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+		gh_base="$mirror_url"
+	else
+		gh_base="${proxy}https://github.com/"
+	fi
 	[ "$proxy" = "DIRECT" ] && proxy=""
- 	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
+ 	length=$(wget --no-check-certificate -T 5 -t 3 "${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	et_size0="$(check_disk_size $webbin_path)"
  	[ ! -z "$length" ] && logg "程序大小 ${length}M， 程序路径可用空间 ${et_size0}M "
-        curl -Lko /tmp/easytier-mipsel-linux-muslsf.tar.gz --connect-timeout 5 --max-time 90 --retry 3 --retry-delay 2 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" || wget --no-check-certificate -T 30 -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
+        curl -Lko /tmp/easytier-mipsel-linux-muslsf.tar.gz --connect-timeout 5 --max-time 90 --retry 3 --retry-delay 2 --speed-limit 1024 --speed-time 15 "${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz" || wget --no-check-certificate -T 30 -O /tmp/easytier-mipsel-linux-muslsf.tar.gz "${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz"
 	if [ "$?" = 0 ] ; then
 		tar -xzf /tmp/easytier-mipsel-linux-muslsf.tar.gz -O easytier-web > "$webbin_path/easytier-web"
 		chmod +x $et_web_bin
@@ -484,12 +513,12 @@ dowload_web() {
    			rm -rf /tmp/easytier-mipsel-linux-muslsf.tar.gz
 			break
        		else
-	   		logg "下载不完整，请手动下载 ${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 解压上传到  $et_web_bin"
+	   		logg "下载不完整，请手动下载 ${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 解压上传到  $et_web_bin"
 	   		rm -f $et_web_bin
       			rm -rf /tmp/easytier-mipsel-linux-muslsf.tar.gz
 	  	fi
 	else
-		logg "下载失败，请手动下载 ${proxy}https://github.com/lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 上传到  $et_web_bin"
+		logg "下载失败，请手动下载 ${gh_base}lmq8267/EasyTier/releases/download/${tag}/easytier-mipsel-linux-muslsf.tar.gz 上传到  $et_web_bin"
 		# 清理下载失败残留的半截 tar 包
 		rm -f /tmp/easytier-mipsel-linux-muslsf.tar.gz
    	fi

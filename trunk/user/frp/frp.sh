@@ -6,6 +6,11 @@ frp_tag=`nvram get frp_tag`
 http_username=`nvram get http_username`
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
+mirror_url="$(nvram get mirror_url)"
+# 国内镜像仓库(如 Gitee/对象存储): 填"基地址", 脚本按"基地址+GitHub路径"拼 URL,
+# 与加速代理的"前缀+完整GitHub URL"模式不同。留空=不使用镜像。
+# 配置了就插到最前面优先尝试, 失败自动回退 GitHub/加速代理。
+[ -n "$mirror_url" ] && github_proxys="$mirror_url $github_proxys"
 # 加速源: 只使用用户在「系统管理 -> 系统设置」页面自定义的 github_proxy(留空 = 直连官方),
 # 不再内置第三方加速站(多数已失效 HTTP 000, 逐个探测纯属浪费时间);
 # 循环末尾的 DIRECT 哨兵保证自定义源失效时仍会直连重试一次。
@@ -147,13 +152,21 @@ frp_dl ()
 	[ ! -d "$frps_path" ] && mkdir -p "$frps_path"
 	logger -t "【Frp】" "开始下载 https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz"
 	for proxy in $github_proxys DIRECT ; do
+	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	if [ "$proxy" = "DIRECT" ] ; then
+		gh_base="https://github.com/"
+	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+		gh_base="$mirror_url"
+	else
+		gh_base="${proxy}https://github.com/"
+	fi
 		[ "$proxy" = "DIRECT" ] && proxy=""
- 	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
+ 	length=$(wget --no-check-certificate -T 5 -t 3 "${gh_base}fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	frp_size0="$(check_disk_size $frpc_path)"
  	[ ! -z "$length" ] && logger -t "【Frp】" "frp_linux_mipsle.tar.gz压缩包大小 ${length}M， 程序路径可用空间 ${frp_size0}M "
-        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/frp_linux_mipsle.tar.gz" "${proxy}https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz" || wget --no-check-certificate -T 30 -O "/tmp/frp_linux_mipsle.tar.gz" "${proxy}https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/frp_linux_mipsle.tar.gz" "${gh_base}fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz" || wget --no-check-certificate -T 30 -O "/tmp/frp_linux_mipsle.tar.gz" "${gh_base}fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz"
 	if [ "$?" = 0 ] ; then
 		tar -xz -C /tmp -f /tmp/frp_linux_mipsle.tar.gz
 		frpc_size="$(du -k /tmp/frp_${newtag}_linux_mipsle/frpc | awk '{print int($1 / 1024)}')"
@@ -168,7 +181,7 @@ frp_dl ()
 				cp "/tmp/frp_${newtag}_linux_mipsle/frpc" "$frpc"
 				break
        			else
-	   			logger -t "【Frp】" "frpc 下载不完整，请手动下载 ${proxy}https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz 解压上传到  $frpc"
+	   			logger -t "【Frp】" "frpc 下载不完整，请手动下载 ${gh_base}fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz 解压上传到  $frpc"
 	  		fi
 		fi
 		if [ "$frps_enable" = "1" ] ; then
@@ -179,14 +192,14 @@ frp_dl ()
 				cp "/tmp/frp_${newtag}_linux_mipsle/frps" "$frps"
 				break
        			else
-	   			logger -t "【Frp】" "frps 下载不完整，请手动下载 ${proxy}https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz 解压上传到  $frps"
+	   			logger -t "【Frp】" "frps 下载不完整，请手动下载 ${gh_base}fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz 解压上传到  $frps"
 	  		fi
 		fi
 		
 		rm -rf /tmp/frp_${newtag}_linux_mipsle /tmp/frp_linux_mipsle.tar.gz
 		
 	else
-		logger -t "【Frp】" "下载失败，请手动下载 ${proxy}https://github.com/fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz 解压上传"
+		logger -t "【Frp】" "下载失败，请手动下载 ${gh_base}fatedier/frp/releases/download/${tag}/frp_${newtag}_linux_mipsle.tar.gz 解压上传"
    	fi
 	done
       

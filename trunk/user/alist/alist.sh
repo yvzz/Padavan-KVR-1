@@ -38,6 +38,11 @@ repo="OpenListTeam/OpenList"
 [ ! -d /tmp/alist ] && mkdir -p /tmp/alist
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
+mirror_url="$(nvram get mirror_url)"
+# 国内镜像仓库(如 Gitee/对象存储): 填"基地址", 脚本按"基地址+GitHub路径"拼 URL,
+# 与加速代理的"前缀+完整GitHub URL"模式不同。留空=不使用镜像。
+# 配置了就插到最前面优先尝试, 失败自动回退 GitHub/加速代理。
+[ -n "$mirror_url" ] && github_proxys="$mirror_url $github_proxys"
 # 加速源: 只使用用户在「系统管理 -> 系统设置」页面自定义的 github_proxy(留空 = 直连官方),
 # 不再内置第三方加速站(多数已失效 HTTP 000, 逐个探测纯属浪费时间);
 # 循环末尾的 DIRECT 哨兵保证自定义源失效时仍会直连重试一次。
@@ -102,20 +107,28 @@ dowload_al() {
 	bin_path=$(dirname "$alist")
 	[ ! -d "$bin_path" ] && mkdir -p "$bin_path"
 	if [ "$alist_upx" = "1" ] ; then
-		url="https://github.com/lmq8267/alist/releases/download/${tag}/alist.tar.gz"
+		url="lmq8267/alist/releases/download/${tag}/alist.tar.gz"
 	else
-		url="https://github.com/OpenListTeam/OpenList/releases/download/${tag}/openlist-linux-musl-mipsle.tar.gz"
+		url="OpenListTeam/OpenList/releases/download/${tag}/openlist-linux-musl-mipsle.tar.gz"
 	fi
 	logger -t "【Alist】" "开始下载 ${url} "
 	[ -z "$github_proxys" ] && logger -t "【Alist】" "加速镜像地址为空.."
 	for proxy in $github_proxys DIRECT ; do
+	# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+	if [ "$proxy" = "DIRECT" ] ; then
+		gh_base="https://github.com/"
+	elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+		gh_base="$mirror_url"
+	else
+		gh_base="${proxy}https://github.com/"
+	fi
 		[ "$proxy" = "DIRECT" ] && proxy=""
- 	length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}${url}" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
+ 	length=$(wget --no-check-certificate -T 5 -t 3 "${gh_base}${url}" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  	length=`expr $length + 512000`
 	length=`expr $length / 1048576`
  	alist_size0="$(check_disk_size $bin_path)"
  	[ ! -z "$length" ] && logger -t "【Alist】" "程序大小 ${length}M， 程序路径可用空间 ${alist_size0}M "
-        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/alist.tar.gz" "${proxy}${url}" || wget --no-check-certificate -T 30 -O "/tmp/alist.tar.gz" "${proxy}${url}"
+        curl --connect-timeout 5 --max-time 180 --speed-limit 1024 --speed-time 15 -Lko "/tmp/alist.tar.gz" "${gh_base}${url}" || wget --no-check-certificate -T 30 -O "/tmp/alist.tar.gz" "${gh_base}${url}"
 	if [ "$?" = 0 ] ; then
 		logger -t "【Alist】" "开始解压..."
 		tar -xzf /tmp/alist.tar.gz -C $bin_path
@@ -131,11 +144,11 @@ dowload_al() {
 			rm -rf /tmp/alist.tar.gz
 			break
        		else
-	   		logger -t "【Alist】" "下载不完整，请手动下载 ${proxy}${url} 解压上传到  $alist"
+	   		logger -t "【Alist】" "下载不完整，请手动下载 ${gh_base}${url} 解压上传到  $alist"
 			rm -rf /tmp/alist.tar.gz 
 	  	fi
 	else
-		logger -t "【Alist】" "下载失败，请手动下载 ${proxy}${url} 解压上传到  $alist"
+		logger -t "【Alist】" "下载失败，请手动下载 ${gh_base}${url} 解压上传到  $alist"
    	fi
 	done
 }

@@ -10,6 +10,11 @@ caddyf_wan_port=`nvram get caddyf_wan_port`
 caddyw_wan_port=`nvram get caddyw_wan_port`
 caddy_wip6=`nvram get caddy_wip6`
 github_proxys="$(nvram get github_proxy)"
+mirror_url="$(nvram get mirror_url)"
+# 国内镜像仓库(如 Gitee/对象存储): 填"基地址", 脚本按"基地址+GitHub路径"拼 URL,
+# 与加速代理的"前缀+完整GitHub URL"模式不同。留空=不使用镜像。
+# 配置了就插到最前面优先尝试, 失败自动回退 GitHub/加速代理。
+[ -n "$mirror_url" ] && github_proxys="$mirror_url $github_proxys"
 # 加速源: 只使用用户在「系统管理 -> 系统设置」页面自定义的 github_proxy(留空 = 直连官方),
 # 不再内置第三方加速站(多数已失效 HTTP 000, 逐个探测纯属浪费时间);
 # 循环末尾的 DIRECT 哨兵保证自定义源失效时仍会直连重试一次。
@@ -52,24 +57,32 @@ caddy_dl() {
        if [ ! -f "$caddy_dir" ] || [[ "$($caddy_dir -h 2>&1 | wc -l)" -lt 2 ]] ; then
 		logger -t "【caddy】" "找不到caddy_filebrowser文件，下载caddy_filebrowser程序"
 		for proxy in $github_proxys DIRECT ; do
+		# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+		if [ "$proxy" = "DIRECT" ] ; then
+			gh_base="https://github.com/"
+		elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+			gh_base="$mirror_url"
+		else
+			gh_base="${proxy}https://github.com/"
+		fi
 			[ "$proxy" = "DIRECT" ] && proxy=""
-  		length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
+  		length=$(wget --no-check-certificate -T 5 -t 3 "${gh_base}lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  		length=`expr $length + 512000`
 		length=`expr $length / 1048576`
  		caddy_size0="$(check_disk_size $bin_path)"
  		[ ! -z "$length" ] && logger -t "【caddy】" "程序大小 ${length}M， 程序路径可用空间 ${caddy_size0}M "
-		curl -L -k -o "$caddy_dir" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser" || wget --no-check-certificate -T 30 -O "$caddy_dir" "${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser"
+		curl -L -k -o "$caddy_dir" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${gh_base}lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser" || wget --no-check-certificate -T 30 -O "$caddy_dir" "${gh_base}lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser"
 		if [ "$?" = 0 ] ; then
 			chmod +x $caddy_dir
 			if [[ "$($caddy_dir -h 2>&1 | wc -l)" -gt 3 ]] ; then
 				logger -t "【caddy】" "$caddy_dir 下载成功"
 				break
        			else
-	   			logger -t "【caddy】" "下载不完整，删除...请手动下载 ${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser 上传到  $caddy_dir"
+	   			logger -t "【caddy】" "下载不完整，删除...请手动下载 ${gh_base}lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser 上传到  $caddy_dir"
 				rm -f $caddy_dir
 	  		fi
 		else
-			logger -t "【caddy】" "下载失败${proxy}https://github.com/lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser"
+			logger -t "【caddy】" "下载失败${gh_base}lmq8267/padavan-KVR/blob/main/trunk/user/caddy/caddy_filebrowser"
    		fi
 		
 		done
@@ -92,24 +105,32 @@ caddy_dl2() {
         	fi
 		[ -z "$tag" ] && logger -t "【caddy】" "无法获取最新版本,使用 v2.8.4" && tag="v2.8.4"
 		for proxy in $github_proxys DIRECT ; do
+		# 镜像仓库=基地址+GitHub路径; 加速代理=前缀+完整GitHub URL; DIRECT=直连
+		if [ "$proxy" = "DIRECT" ] ; then
+			gh_base="https://github.com/"
+		elif [ -n "$mirror_url" ] && [ "$proxy" = "$mirror_url" ] ; then
+			gh_base="$mirror_url"
+		else
+			gh_base="${proxy}https://github.com/"
+		fi
 			[ "$proxy" = "DIRECT" ] && proxy=""
-  		length=$(wget --no-check-certificate -T 5 -t 3 "${proxy}https://github.com/lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
+  		length=$(wget --no-check-certificate -T 5 -t 3 "${gh_base}lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx" -O /dev/null --spider --server-response 2>&1 | grep "[Cc]ontent-[Ll]ength" | grep -Eo '[0-9]+' | tail -n 1)
  		length=`expr $length + 512000`
 		length=`expr $length / 1048576`
  		caddy_size0="$(check_disk_size $bin_path)"
  		[ ! -z "$length" ] && logger -t "【caddy】" "程序大小 ${length}M， 程序路径可用空间 ${caddy_size0}M "
-		curl -L -k -o "$caddy_dir" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${proxy}https://github.com/lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx" || wget --no-check-certificate -T 30 -O "$caddy_dir" "${proxy}https://github.com/lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx"
+		curl -L -k -o "$caddy_dir" --connect-timeout 10 --retry 3 --max-time 180 --speed-limit 1024 --speed-time 15 "${gh_base}lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx" || wget --no-check-certificate -T 30 -O "$caddy_dir" "${gh_base}lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx"
 		if [ "$?" = 0 ] ; then
 			chmod +x $caddy_dir
 			if [[ "$($caddy_dir -h 2>&1 | wc -l)" -gt 3 ]] ; then
 				logger -t "【caddy】" "$caddy_dir 下载成功"
 				break
        			else
-	   			logger -t "【caddy】" "下载不完整，删除...请手动下载 ${proxy}https://github.com/lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx 上传到  $caddy_dir"
+	   			logger -t "【caddy】" "下载不完整，删除...请手动下载 ${gh_base}lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx 上传到  $caddy_dir"
 				rm -f $caddy_dir
 	  		fi
 		else
-			logger -t "【caddy】" "下载失败${proxy}https://github.com/lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx"
+			logger -t "【caddy】" "下载失败${gh_base}lmq8267/caddy/releases/download/${tag}/caddy-mipsel-upx"
    		fi
 		
 		done
