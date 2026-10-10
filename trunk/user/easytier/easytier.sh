@@ -323,6 +323,14 @@ dowload_et_official() {
 		rm -f /tmp/${zip_name}
 		continue
 	fi
+	# 校验 zip 完整性: 空间不足或下载被中断时 zip 会被截断, 但文件仍"非空",
+	# 只靠 -s 判断不出来。unzip -t 能提前发现, 避免解压出坏二进制后
+	# 被误判成"版本不兼容"而锁死 30 分钟。
+	if ! unzip -t /tmp/${zip_name} >/dev/null 2>&1 ; then
+		logg "源 ${proxy:-直连} 下载的 zip 不完整(校验失败), 换源重试"
+		rm -f /tmp/${zip_name}
+		continue
+	fi
 	# 下载成功, 解压
 	rm -rf /tmp/easytier_official
 	mkdir -p /tmp/easytier_official
@@ -338,6 +346,10 @@ dowload_et_official() {
 	mv -f /tmp/easytier_official/easytier-linux-mipsel/easytier-core "$bin_path/easytier-core"
 	mv -f /tmp/easytier_official/easytier-linux-mipsel/easytier-cli "$bin_path/easytier-cli"
 	chmod +x "$bin_path/easytier-core" "$bin_path/easytier-cli"
+	# 二进制已就位: 立刻删掉 zip 与解压目录(合计约 19M), 给下面的 -h 运行测试腾空间。
+	# 旧代码等到 -h 通过后才清理, 小 /tmp 上会因空间不足让 -h 失败,
+	# 被误判成"版本不兼容"锁 30 分钟。
+	rm -rf /tmp/${zip_name} /tmp/easytier_official
 	# 测试能否运行: -h 输出 > 3 行才算正常
 	if [[ "$($et_core -h 2>&1 | wc -l)" -gt 3 ]] ; then
 		logg "$et_core 官方版本下载成功"
@@ -352,12 +364,18 @@ dowload_et_official() {
 		rm -rf /tmp/${zip_name} /tmp/easytier_official
 		return 0
 	else
-		# 二进制完整但跑不起来: 换任何源下载的都是同一个 release 同一个二进制,
-		# 重下只是浪费带宽和内存, 还会撑爆小 /tmp. 记住这个版本, 30 分钟内不再重下,
-		# 避免守护每 80 秒反复下载同一个跑不起来的版本形成死循环
-		logg "官方版本 $tag 无法运行(-h 测试失败), 不再换源重试(换源下载的二进制相同)"
-		nvram set easytier_bin_bad="$tag"
-		nvram set easytier_bin_bad_ts="$(date +%s)"
+		# 走到这里说明: zip 完整性已校验通过、二进制也已解压出来, 但 -h 跑不起来。
+		# 若是 /tmp 依然吃紧, 大概率是空间不足(而非版本不兼容) —— 绝不能锁死版本,
+		# 否则要白白等 30 分钟才重试; 只有空间充裕仍失败, 才认定是版本真的不兼容
+		# (换任何源下载的二进制都相同, 重下纯属浪费带宽并再次撑爆 /tmp)。
+		_room=$(df -k /tmp 2>/dev/null | awk 'NR==2{print $4}')
+		if [ -n "$_room" ] && [ "$_room" -lt 5120 ] 2>/dev/null ; then
+			logg "$et_core 启动测试失败, 但 /tmp 仅剩 ${_room}K(疑似空间不足), 不锁定版本, 稍后重试"
+		else
+			logg "官方版本 $tag 无法运行(-h 测试失败), 不再换源重试(换源下载的二进制相同)"
+			nvram set easytier_bin_bad="$tag"
+			nvram set easytier_bin_bad_ts="$(date +%s)"
+		fi
 		rm -f $et_core
 		rm -rf /tmp/${zip_name} /tmp/easytier_official
 		return 1
@@ -454,19 +472,23 @@ et_make_tmp_room() {
 	# 只清理 /tmp 下的 npc 二进制(/etc/storage/bin 里的不占 /tmp 空间)
 	_avail=$(df -k /tmp 2>/dev/null | awk 'NR==2{print $4}')
 	[ -n "$_avail" ] || _avail=0
-	# 阈值 20M: core 约 7M + zip 约 8.9M 解压 + 余量
-	[ "$_avail" -ge 20480 ] 2>/dev/null && return 0
+	# 阈值 32M: zip 约 9.4M + 解压后 core 6.7M + cli 2.7M ≈ 19M, 再给 NPC 二进制
+	# (约 9M) 与日志留余量。旧阈值 20M 会在"NPC 已占 9M"时误判为空间够,
+	# 导致 unzip 解压出被截断的二进制, 最终 -h 测试失败并被误锁 30 分钟。
+	[ "$_avail" -ge 32768 ] 2>/dev/null && return 0
 
 	rm -f /var/run/easytier_tmp_room 2>/dev/null
 	# NPC 未启用, 或二进制不在 /tmp(在 flash), 无需也不应动
 	[ "$(nvram get npc_enable)" = "1" ] || return 0
-	# 只有 NPC 二进制确实在 /tmp 且占空间时才值得停/删
-	if [ ! -s /tmp/npc/npc ] ; then
-		return 0
-	fi
+	# 不能因为 /tmp/npc/npc "还不存在或为空"就跳过:
+	# 开机时 NPC 与 EasyTier 是并行拉起的, 此刻 NPC 往往刚开始下载、
+	# 二进制尚未落地(-s 判定为假), 但紧接着就会占用约 9M。
+	# 旧逻辑在这里提前 return, 于是 9M + 19M 一起把 tmpfs 撑爆。
+	# 正确做法: 只要 NPC 开着就先停掉(阻止它继续下载), 再清 /tmp 里的残留。
 	logg "/tmp 可用仅 ${_avail}K, 暂停 NPC 并清理其二进制腾空间"
 	/usr/bin/npc.sh stop >/dev/null 2>&1
 	rm -f /tmp/npc/npc /tmp/npc/npc.ver /tmp/npc/npc.tar.gz 2>/dev/null
+	rm -rf /tmp/npc 2>/dev/null
 	# 写标记: 本次腾过空间, 待 EasyTier 启动完成后恢复 NPC
 	touch /var/run/easytier_tmp_room 2>/dev/null
 }
@@ -659,7 +681,11 @@ start_core() {
 			fi
 		fi
 		logg "主程序${et_core}不存在，开始在线下载..."
-  		dowload_et $tag
+  		if ! dowload_et $tag ; then
+  			dl_lock_release
+  			logg "本次下载未成功, 不启动, 等待守护下次重试"
+  			return 1
+  		fi
 		dl_lock_release
   	fi
 	sed -Ei '/【EasyTier_core】|^$/d' /tmp/script/_opt_script_check
