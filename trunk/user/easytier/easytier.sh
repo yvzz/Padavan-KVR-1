@@ -23,9 +23,11 @@ et_extra_args="$(nvram get easytier_extra_args)"
 [ -z "$et_web_api" ] && et_web_port=11211
 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 github_proxys="$(nvram get github_proxy)"
-# 多源兜底: 用户自定义加速站优先, 后面始终追加内置加速站(实测可达的 3 个),
-# 末尾 DIRECT 为哨兵(循环中置空 = 直连), 保证 github_proxy 失效时仍能下载
-github_proxys="$github_proxys https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/ DIRECT"
+# 多源兜底: 用户自定义加速站优先, 末尾 DIRECT 为哨兵(循环中置空 = 直连),
+# 保证 github_proxy 失效时仍能下载. 不再内置硬编码加速站:
+# 第三方加速站(ghfast.top/gh-proxy.com/ghproxy.net 等)大面积失效或极慢,
+# 逐个探测纯属浪费时间, 直连官方 GitHub 反而是最稳的路径.
+github_proxys="$github_proxys DIRECT"
 easytier_renum=`nvram get easytier_renum`
 
 logg() {
