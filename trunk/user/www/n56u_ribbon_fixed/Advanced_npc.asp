@@ -44,6 +44,7 @@ function initial(){
 
 	change_npc_enable_bridge(1);
 	fill_status(npc_status());
+	showhide_div("npc_restart_btn", npc_status());
 
 	if (!login_safe())
 		textarea_scripts_enabled(0);
@@ -92,6 +93,13 @@ function change_npc_enable_bridge(mflag){
 	showhide_div("npc_crypt_tr", m);
 	showhide_div("npc_log_level_tr", m);
 	showhide_div("npc_version_tr", m);
+}
+
+function button_restartnpc() {
+	var $j = jQuery.noConflict();
+	$j.post('/apply.cgi', {
+		'action_mode': ' Restartnpc '
+	});
 }
 
 </script>
@@ -167,11 +175,14 @@ function change_npc_enable_bridge(mflag){
 														<input type="checkbox" id="npc_enable_fake" <% nvram_match_x("", "npc_enable", "1", "value=1 checked"); %><% nvram_match_x("", "npc_enable", "0", "value=0"); %>  />
 													</div>
 												</div>
-												<div style="position: absolute; margin-left: -10000px;">
-													<input type="radio" value="1" name="npc_enable" id="npc_enable_1" class="input" value="1" onClick="change_npc_enable_bridge(1);" <% nvram_match_x("", "npc_enable", "1", "checked"); %> /><#checkbox_Yes#>
-													<input type="radio" value="0" name="npc_enable" id="npc_enable_0" class="input" value="0" onClick="change_npc_enable_bridge(1);" <% nvram_match_x("", "npc_enable", "0", "checked"); %> /><#checkbox_No#>
-												</div>
-											</td>
+											<div style="position: absolute; margin-left: -10000px;">
+												<input type="radio" value="1" name="npc_enable" id="npc_enable_1" class="input" value="1" onClick="change_npc_enable_bridge(1);" <% nvram_match_x("", "npc_enable", "1", "checked"); %> /><#checkbox_Yes#>
+												<input type="radio" value="0" name="npc_enable" id="npc_enable_0" class="input" value="0" onClick="change_npc_enable_bridge(1);" <% nvram_match_x("", "npc_enable", "0", "checked"); %> /><#checkbox_No#>
+											</div>
+											<div id="npc_restart_btn" style="display:none; float: right; margin-right: 10px;">
+												<input class="btn btn-success" style="width:80px" type="button" value="重启" onclick="button_restartnpc()" />
+											</div>
+										</td>
 										</tr>
 										<tr id="npc_server_addr_tr" style="display:none;">
 											<th width="30%" style="border-top: 0 none;"><a class="help_tooltip" href="javascript: void(0)" onmouseover="openTooltip(this, 26, 9);">服务器地址:</a></th>

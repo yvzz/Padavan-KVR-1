@@ -4246,6 +4246,13 @@ apply_cgi(const char *url, webs_t wp)
 #endif
 		return 0;
 	}
+	else if (!strcmp(value, " Restartnpc "))
+	{
+#if defined(APP_NPC)
+		system("/usr/bin/npc.sh restart &");
+#endif
+		return 0;
+	}
 	else if (!strcmp(value, " Restarteasytier "))
 	{
 #if defined(APP_EASYTIER)
