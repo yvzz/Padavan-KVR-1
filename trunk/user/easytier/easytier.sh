@@ -338,10 +338,48 @@ dowload_et_mirror() {
 	done
 }
 
+# 下载前检测 /tmp 空间; 不足时暂停 NPC 并清掉它在 /tmp 里的二进制腾空间,
+# 记录到 /var/run/easytier_tmp_room 标记, 供 start_core 下载启动完成后恢复 NPC.
+# 背景: K2P 的 /tmp 是 tmpfs 约 30M, EasyTier(约 9M) 与 NPC(约 9M) 的二进制都往
+# /tmp 里放时会把空间挤爆, 导致双方下载/启动都失败.
+et_make_tmp_room() {
+	# 只清理 /tmp 下的 npc 二进制(/etc/storage/bin 里的不占 /tmp 空间)
+	_avail=$(df -k /tmp 2>/dev/null | awk 'NR==2{print $4}')
+	[ -n "$_avail" ] || _avail=0
+	# 阈值 20M: core 约 7M + zip 约 8.9M 解压 + 余量
+	[ "$_avail" -ge 20480 ] 2>/dev/null && return 0
+
+	rm -f /var/run/easytier_tmp_room 2>/dev/null
+	# NPC 未启用, 或二进制不在 /tmp(在 flash), 无需也不应动
+	[ "$(nvram get npc_enable)" = "1" ] || return 0
+	# 只有 NPC 二进制确实在 /tmp 且占空间时才值得停/删
+	if [ ! -s /tmp/npc/npc ] ; then
+		return 0
+	fi
+	logg "/tmp 可用仅 ${_avail}K, 暂停 NPC 并清理其二进制腾空间"
+	/usr/bin/npc.sh stop >/dev/null 2>&1
+	rm -f /tmp/npc/npc /tmp/npc/npc.ver /tmp/npc/npc.tar.gz 2>/dev/null
+	# 写标记: 本次腾过空间, 待 EasyTier 启动完成后恢复 NPC
+	touch /var/run/easytier_tmp_room 2>/dev/null
+}
+
+# EasyTier 下载并启动完成后, 若之前为腾空间停过 NPC, 这里恢复它.
+# 由 start_core 在下载/启动成功路径调用; 失败路径由守护下次重试时再恢复.
+et_restore_npc() {
+	[ -f /var/run/easytier_tmp_room ] || return 0
+	rm -f /var/run/easytier_tmp_room 2>/dev/null
+	# NPC 仍启用才恢复; 用户中途关掉就不拉起
+	[ "$(nvram get npc_enable)" = "1" ] || return 0
+	logg "EasyTier 已就绪, 恢复之前暂停的 NPC"
+	/usr/bin/npc.sh start >/dev/null 2>&1 &
+}
+
 # 主入口: 先清旧残留腾空间, 只走官方源(8.9M 小包, 适配 K2P 30M 小 /tmp).
 # 镜像源(16M tar + 20M 二进制)在小 /tmp 上根本放不下, 是"可用空间 0M"的元凶, 已移除.
 dowload_et() {
 	tag="$1"
+	# 空间不足时先暂停 NPC 腾出 /tmp 空间, 避免与 NPC 二进制同时塞满 tmpfs
+	et_make_tmp_room
 	# 清理历史残留的下载包, 避免小容量 /tmp 被旧文件占满导致新下载放不下
 	rm -f /tmp/easytier-linux-*.zip /tmp/easytier-mipsel-linux-*.tar.gz 2>/dev/null
 	rm -rf /tmp/easytier_official 2>/dev/null
@@ -563,6 +601,8 @@ start_core() {
   		et_restart o
 		echo `date +%s` > /tmp/easytier_time
 		et_rules
+		# 下载启动成功: 若之前为腾 /tmp 空间暂停过 NPC, 现在恢复它
+		et_restore_npc
 	else
 		logg "运行失败, 注意检查${et_core}是否下载完整,10 秒后自动尝试重新启动"
   		sleep 10
