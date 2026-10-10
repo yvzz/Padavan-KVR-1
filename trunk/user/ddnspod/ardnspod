@@ -296,7 +296,11 @@ arDdnsLookup() {
     fi
 
     # Get Record Id
-    recordRs=$(arDdnsApi "Record.List" "domain=$1${subDomainRule}&record_type=$3")
+    # record_line_id=0 = 默认线路, 与 Create 用的 record_line=%e9%bb%98%e8%ae%a4 (默认) 对应.
+    # 不加这个参数时 DNSPod API 偶发返回空 records 数组(已知一致性坑), 导致
+    # Lookup 误判"记录不存在" -> Create 报"Record already exists" -> 死结.
+    # 按 line 过滤后与 Create 查询条件一致, 避免空数组误判.
+    recordRs=$(arDdnsApi "Record.List" "domain=$1${subDomainRule}&record_type=$3&record_line_id=0")
     # 只取 records 数组后的第一个 "id":"数字", 避免取到 domain.id.
     # 原来的贪婪 sed `.*"id":"数字".*` 在记录不存在(空数组)时会取到 domain.id
     # (它是 JSON 里唯一的 "id":"数字"), 导致 [ $recordId -gt 0 ] 为真,
@@ -444,6 +448,10 @@ arDdnsCheck() {
         if [ $errCode -eq 0 ]; then
             arLog "> Record Id: $recordId"
             return 0
+        elif [ $errCode -eq 3 ]; then
+            # 记录已存在, Create 内部按 line 恢复了 id. 落到下面 update 分支
+            # 把 IP 同步成当前 hostIp, 避免记录存在但值过期.
+            arLog "> Record Id: $recordId (existed)"
         else
             arLog "$recordId"
             return $errCode
@@ -467,6 +475,7 @@ arDdnsCreate() {
 
     local recordRs
     local recordCd
+    local recordId
 
     # create record
     recordRs=$(arDdnsApi "Record.Create" "domain=$1&sub_domain=$2&record_type=$3&value=$4&record_line=%e9%bb%98%e8%ae%a4")
@@ -475,16 +484,31 @@ arDdnsCreate() {
     recordCd=$(echo $recordRs | sed 's/.*{"code":"\([0-9]*\)".*/\1/')
     recordId=$(echo $recordRs | sed 's/.*{"id":"\([0-9]*\)".*/\1/')
 
-    # check result
-    if [ "$recordCd" != "1" ]; then
-        errMsg=$(echo $recordRs | sed 's/.*,"message":"\([^"]*\)".*/\1/')
-        arLog "> arDdnsCreate - error: $errMsg"
-        return 1
+    # 成功: 全新创建
+    if [ "$recordCd" = "1" ]; then
+        arLog "> arDdnsCreate - created: $4"
+        echo $recordId
+        return 0
     fi
 
-    arLog "> arDdnsCreate - created: $4"
-    echo $recordId
+    errMsg=$(echo $recordRs | sed 's/.*,"message":"\([^"]*\)".*/\1/')
+    arLog "> arDdnsCreate - error: $errMsg"
 
+    # "Record already exists": Create 用 line 参数确认记录在, 但 Lookup 查不到
+    # (DNSPod API 在 List 不带 line 时偶发漏返回的已知坑).
+    # 按与 Create 一致的 line 重新查一次, 拿到真实 record_id 让调用方继续 update,
+    # 把 IP 同步成当前值. 返回 3 = "记录已存在, 已恢复 id, 调用方应继续 update".
+    if echo "$errMsg" | grep -q "Record already exists"; then
+        recordRs=$(arDdnsApi "Record.List" "domain=$1&sub_domain=$2&record_type=$3&record_line_id=0")
+        recordId=$(echo "$recordRs" | awk -F'"records":' '{print $2}' | sed 's/.*"id":"\([0-9]*\)".*/\1/')
+        if [ -n "$recordId" ] && [ "$recordId" -gt 0 ] 2>/dev/null; then
+            arLog "> arDdnsCreate - record exists, recovered id: $recordId"
+            echo "$recordId"
+            return 3
+        fi
+    fi
+
+    return 1
 }
 
 ################################################################### end ##

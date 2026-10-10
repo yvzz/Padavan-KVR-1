@@ -28,9 +28,13 @@ function LoadingTime(seconds, flag){
 			showtext($("proceeding_main_txt"), translate("<#Main_alert_proceeding_desc3#>"));
 			showtext($("proceeding_txt"), "");
 			y = 0;
-			
-			if(flag != "waiting")
-				setTimeout("hideLoading();",1000);
+
+			// 不论 flag 是什么, 进度到 100% 后 1 秒都自动隐藏进度条.
+			// 原来只对非 "waiting" 调 hideLoading, waiting(如"应用设置")依赖
+			// parent.parent.location.href 跳转来清除, 但若 restart_time=0 且
+			// 目标页与当前页同 URL, 部分浏览器会优化跳过重载, 进度条就会
+			// 一直停在"完成"状态. 现在显式收尾, 跳转未触发也不卡死.
+			setTimeout("hideLoading();",1000);
 		}
 	}
 }
