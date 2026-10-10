@@ -108,8 +108,6 @@ fi
 
 if [ $(nvram get easytier_enable) = 1 ] || [ $(nvram get easytier_enable) = 2 ] || [ $(nvram get easytier_web_enable) = 1 ] ; then
 logger -t "自动启动" "正在启动EasyTier"
-# 清掉上一次启动留下的就绪标记, 保证本次开机 NPC 真的会等 EasyTier
-rm -f /var/run/easytier_ready
 /usr/bin/easytier.sh start &
 fi
 
