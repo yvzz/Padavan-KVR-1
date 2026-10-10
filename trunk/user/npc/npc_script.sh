@@ -1,5 +1,5 @@
 #!/bin/sh
-# npc_script_v4
+# npc_script_v5
 # 生成 npc 配置并启动. 二进制由 /usr/bin/npc.sh 按需下载
 # (优先 /etc/storage/bin/npc, 空间不足时回退 /tmp/npc/npc)
 #
@@ -78,7 +78,7 @@ fi
 
 if [ "$npc_enable" = "1" ] ; then
 	if [ -z "$npc_bin" ]; then
-		logger -t "NPC" "npc 二进制文件不存在 (等待 npc.sh 下载)"
+		logger -t "【NPC】" "npc 二进制文件不存在 (等待 npc.sh 下载)"
 	else
 		chmod 755 "$npc_bin"
 		cd "$(dirname "$npc_bin")"
@@ -86,6 +86,6 @@ if [ "$npc_enable" = "1" ] ; then
 		# 线程栈一多就容易分配失败(EAGAIN)直接 panic
 		[ -z "$NPC_WORKER_THREADS" ] && NPC_WORKER_THREADS=2
 		TOKIO_WORKER_THREADS=$NPC_WORKER_THREADS "$npc_bin" -config=$tmpconf -log_level=$Log_level -log_path=$LOGFILE -debug=false >/dev/null 2>&1 &
-		logger -t "NPC" "npc 已启动, 服务器 $server_full, PID $!"
+		logger -t "【NPC】" "npc 已启动, 服务器 $server_full, PID $!"
 	fi
 fi

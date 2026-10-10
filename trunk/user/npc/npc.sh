@@ -21,7 +21,7 @@ NPC_LOCK="/var/lock/npc.lock"
 # 标记: 用于把老固件遗留的 /etc/storage/npc_script.sh 迁移成新版本(只迁移一次)
 # 改动 npc_script.sh 逻辑时必须同步+1, 否则 /etc/storage 里的旧版不会被新版覆盖,
 # 页面上的"服务器地址/端口"等设置改了也不生效(实际执行的始终是旧脚本)
-NPC_SCRIPT_TAG="npc_script_v4"
+NPC_SCRIPT_TAG="npc_script_v5"
 
 npc_enable=`nvram get npc_enable`
 http_username=`nvram get http_username`
@@ -97,7 +97,7 @@ npc_single_check()
 		[ $_cnt -eq 1 ] && _first=$_p
 	done
 	[ $_cnt -le 1 ] && return 0
-	logger -t "npc" "检测到 $_cnt 个 npc 实例, 只保留 PID $_first"
+	logger -t "【NPC】" "检测到 $_cnt 个 npc 实例, 只保留 PID $_first"
 	for _p in $_pids ; do
 		[ "$_p" = "$_first" ] || kill -9 "$_p" 2>/dev/null
 	done
@@ -139,7 +139,7 @@ if [ ! -s "/etc/storage/npc_script.sh" ] || ! grep -q "$NPC_SCRIPT_TAG" /etc/sto
 		[ -s "/etc/storage/npc_script.sh" ] && cp -f /etc/storage/npc_script.sh /etc/storage/npc_script.sh.bak
 		cp -f /etc_ro/npc_script.sh /etc/storage/npc_script.sh
 		chmod 755 /etc/storage/npc_script.sh
-		logger -t "npc" "npc_script.sh 已更新到 $NPC_SCRIPT_TAG (旧版备份为 npc_script.sh.bak)"
+		logger -t "【NPC】" "npc_script.sh 已更新到 $NPC_SCRIPT_TAG (旧版备份为 npc_script.sh.bak)"
 	fi
 fi
 
@@ -189,9 +189,9 @@ npc_ensure_bin()
 		npc_dl_ver=`npc_latest_ver`
 		if [ -z "$npc_dl_ver" ]; then
 			npc_dl_ver="$NPC_FALLBACK_VER"
-			logger -t "npc" "获取最新版本失败, 使用 $npc_dl_ver"
+			logger -t "【NPC】" "获取最新版本失败, 使用 $npc_dl_ver"
 		else
-			logger -t "npc" "使用最新版本 $npc_dl_ver"
+			logger -t "【NPC】" "使用最新版本 $npc_dl_ver"
 		fi
 	fi
 
@@ -202,7 +202,7 @@ npc_ensure_bin()
 		return 0
 	fi
 
-	logger -t "npc" "开始下载 npc $npc_dl_ver 到 $NPC_BIN_DIR ..."
+	logger -t "【NPC】" "开始下载 npc $npc_dl_ver 到 $NPC_BIN_DIR ..."
 	rm -f $NPC_BIN $NPC_BIN_DIR/npc.tar.gz
 	npc_dl "https://github.com/$NPC_REPO/releases/download/$npc_dl_ver/$NPC_TARBALL" "$NPC_BIN_DIR/npc.tar.gz"
 	if [ -s "$NPC_BIN_DIR/npc.tar.gz" ]; then
@@ -217,12 +217,12 @@ npc_ensure_bin()
 		chmod 755 $NPC_BIN
 		echo "$npc_dl_ver" > $NPC_VER_FILE
 		nvram set npc_ver="$npc_dl_ver"
-		logger -t "npc" "npc $npc_dl_ver 下载完成"
+		logger -t "【NPC】" "npc $npc_dl_ver 下载完成"
 		return 0
 	fi
 
 	nvram set npc_ver="下载失败"
-	logger -t "npc" "npc 下载失败(版本 $npc_dl_ver), 稍后自动重试"
+	logger -t "【NPC】" "npc 下载失败(版本 $npc_dl_ver), 稍后自动重试"
 	return 1
 }
 
@@ -240,7 +240,7 @@ npc_start_locked()
 	if ! npc_ensure_bin ; then
 		# flash 上放不下就回退 /tmp 再试一次
 		if [ "$NPC_BIN_DIR" != "/tmp/npc" ] ; then
-			logger -t "npc" "$NPC_BIN_DIR 空间不足, 回退 /tmp/npc"
+			logger -t "【NPC】" "$NPC_BIN_DIR 空间不足, 回退 /tmp/npc"
 			npc_set_dir "/tmp/npc"
 			npc_ensure_bin || return 1
 		else
@@ -249,7 +249,7 @@ npc_start_locked()
 	fi
 
 	if [ ! -s "/etc/storage/npc_script.sh" ]; then
-		logger -t "npc" "npc_script.sh 不存在, 无法启动"
+		logger -t "【NPC】" "npc_script.sh 不存在, 无法启动"
 		return 1
 	fi
 	/etc/storage/npc_script.sh
@@ -262,17 +262,17 @@ npc_start_locked()
 */5 * * * * /bin/sh /usr/bin/npc.sh C >/dev/null 2>&1
 EOF
 	if npc_alive ; then
-		logger -t "npc" "npc启动成功 (`pidof npc | wc -w` 个实例)"
+		logger -t "【NPC】" "npc启动成功 (`pidof npc | wc -w` 个实例)"
 		return 0
 	fi
-	logger -t "npc" "npc启动失败, 请检查配置"
+	logger -t "【NPC】" "npc启动失败, 请检查配置"
 	return 1
 }
 
 npc_start()
 {
 	if ! npc_lock_try ; then
-		logger -t "npc" "已有 npc 操作在进行, 本次跳过(避免重复启动)"
+		logger -t "【NPC】" "已有 npc 操作在进行, 本次跳过(避免重复启动)"
 		return 1
 	fi
 	npc_start_locked
@@ -284,12 +284,12 @@ npc_start()
 npc_close()
 {
 	if ! npc_lock_try ; then
-		logger -t "npc" "已有 npc 操作在进行, 本次跳过"
+		logger -t "【NPC】" "已有 npc 操作在进行, 本次跳过"
 		return 1
 	fi
 	npc_kill_wait
 	sed -i '/npc/d' /etc/storage/cron/crontabs/$http_username 2>/dev/null
-	logger -t "npc" "已停止 npc"
+	logger -t "【NPC】" "已停止 npc"
 	npc_lock_release
 	return 0
 }
@@ -303,7 +303,7 @@ check_npc()
 			npc_start
 		fi
 	else
-		logger -t "npc" "网络未就绪, 本次不重连"
+		logger -t "【NPC】" "网络未就绪, 本次不重连"
 	fi
 }
 
