@@ -1,64 +1,100 @@
 # Padavan-KVR #
 
-![](https://views.whatilearened.today/views/github/yvzz/padavan-KVR-1.svg)[![](https://deepwiki.com/badge.svg)](https://deepwiki.com/lmq8267/padavan-KVR)
+![](https://views.whatilearened.today/views/github/yvzz/padavan-KVR-1.svg)[![](https://deepwiki.com/badge.svg)](https://deepwiki.com/yvzz/padavan-KVR-1)
 
-不需要WireGuard的可以去`trunk/configs/boards/型号/kernel-3.4.x**.config`文件里找到 **`CONFIG_WIREGUARD=y`** 改成 **`# CONFIG_WIREGUARD is not set`** 去掉wg内核模块 约900多k
+基于 [vb1980/Padavan-KVR](https://github.com/vb1980/Padavan-KVR.git) 固件（浅色主题）二次维护，最初 fork 自 [fightroad/Padavan-KVR](https://github.com/fightroad/Padavan-KVR.git)。
 
-fork于fightroad的仓库 https://github.com/fightroad/Padavan-KVR.git 
+继承并整合了 hanwckf、chongshengB、padavanonly 的源码，主要特点：
 
-最终好像也是vb1980  https://github.com/vb1980/Padavan-KVR.git
+1. 采用 padavanonly 源码的 5.0.4.0 无线驱动，支持 KVR（802.11k/v/r 漫游）
+2. 整合 chongshengB 源码的插件体系，并在 Web 管理界面「自定义菜单」中新增了一批内网穿透 / 组网类插件
+3. 部分优化来自 immortalwrt 的 Padavan 源码
+4. 最近的更新代码来自 hanwckf 与 MeIsReallyBa 大佬的 4.4 内核分支
+   - https://github.com/hanwckf/padavan-4.4
+   - https://github.com/MeIsReallyBa/padavan-4.4
 
-透明主题使用的是yuos-bit  https://github.com/yuos-bit/Padavan.git
+上游四位源码地址供参考：
 
-想要没有改主题的可以去上面大佬主页fork
+- https://github.com/hanwckf/rt-n56u
+- https://github.com/chongshengB/rt-n56u
+- https://github.com/padavanonly/rt-n56u
+- https://github.com/immortalwrt/padavan
 
-默认纯净没有添加插件，[在线云编译修改插件](.github/workflows/NEWIFI3.yml) [自定义增减插件](trunk/configs/templates/NEWIFI3.config)，
-我删掉了其他机型的[插件配置文件](trunk/configs/templates)，从[vb1980/Padavan-KVR](https://github.com/vb1980/Padavan-KVR/tree/main/trunk/configs/templates)复制过来吧
-
-修改自己想要的背景图：刷机之后在`/etc/storage/`新建`bg`文件夹 ，里面放一个`wood.jpg`照片就行。 **`/etc/storage/bg/wood.jpg`**
-
-[修改自己想要的LOGO](/trunk/user/www/n56u_ribbon_fixed/bootstrap/img/asus_logo.png) 替换asus_logo.png文件就行(像素尺寸要求150×70）
-
-[修改默认管理地址wifi名称账号密码](trunk/user/shared/defaults.h) 
-
-默认/tmp分区改为100M[修改/tmp分区大小size_tmp="100M"](trunk/user/scripts/dev_init.sh)
-
-修改/etc/storage分区大小[1.CONFIG_MTD_STORE_PART_SIZ=0x200000](trunk/configs/boards/NEWIFI3/kernel-3.4.x.config) ，
-[2.size_etc="6M"](trunk/user/scripts/dev_init.sh) ，
-[3.mtd_part_size=65536](trunk/user/scripts/mtd_storage.sh) ，
-storage大小修改方法：首先确认你闪存多大，比如NEWIFI3 d2是32M闪存，再确认你编译后的固件大小，若是插件集成的多，编译后固件大小假如有28M了？那不必修改了，就剩4M了还改啥，假如你是精简的或者只集成了几个小插件，编译后固件大小比如有18M？那就32-18=14M可用，在[十进制转十六进制](https://www.sojson.com/hexconvert/10to16.html)中输入14M的十进制14680064（计算方式14M×1024×1024=14680064） ，转换得出十六进制为e00000 ，在[trunk/configs/boards/NEWIFI3/kernel-3.4.x.config](trunk/configs/boards/NEWIFI3/kernel-3.4.x.config)找到CONFIG_MTD_STORE_PART_SIZ=0x200000改为CONFIG_MTD_STORE_PART_SIZ=0xe00000 ，然后在[trunk/user/scripts/dev_init.sh](trunk/user/scripts/dev_init.sh)找到size_etc="6M"改为size_etc="14M" 最后在[trunk/user/scripts/mtd_storage.sh](trunk/user/scripts/mtd_storage.sh)找到mtd_part_size=65536 改为mtd_part_size=14680064 即可，切记storage分区大小加上编译后的固件大小必须小于路由器闪存大小，不能超过！这样你的storage就能放下更多文件了。
-
-
-基于hanwckf,chongshengB以及padavanonly的源码整合而来，支持7603/7615/7915的kvr  
-编译方法同其他Padavan源码，主要特点如下：  
-1.采用padavanonly源码的5.0.4.0无线驱动，支持kvr  
-2.添加了chongshengB源码的所有插件  
-3.其他部分等同于hanwckf的源码，有少量优化来自immortalwrt的padavan源码  
-4.添加了MSG1500的7615版本config  
-
-以下附上他们四位的源码地址供参考  
-https://github.com/hanwckf/rt-n56u  
-https://github.com/chongshengB/rt-n56u  
-https://github.com/padavanonly/rt-n56u  
-https://github.com/immortalwrt/padavan
-
-最后编译出的固件对7612无线的支持已知是有问题的，包含7612的机型比如B70是无法正常工作的  
-已测试的机型为MSG1500-7615，JCG-Q20，CR660x  
-
-固件默认wifi名称
- - 2.4G：机器名_mac地址最后四位，如K2P_9981
- - 5G：机器名_5G_mac地址最后四位，如K2P_5G_9981
-
-wifi密码
- - 1234567890
+## 默认登录与 WiFi 信息
 
 管理地址
- - 192.168.2.1
 
-管理账号密码
- - admin
- - admin
+- `192.168.2.1`
 
-**最近的更新代码都来自于hanwckf和MelsReallyBa大佬的4.4内核代码**
-- https://github.com/hanwckf/padavan-4.4
-- https://github.com/MeIsReallyBa/padavan-4.4
+管理账号 / 密码
+
+- `admin` / `admin`
+
+WiFi（默认 SSID 为机型名 `BOARD_PID`，**不带 MAC 后缀**）
+
+- 2.4G：`机型名`，如 `K2P`
+- 5G：`机型名_5G`，如 `K2P_5G`
+- 访客：`机型名_GUEST` / `机型名_GUEST_5G`
+- WiFi 密码：`1234567890`
+
+> 早期版本 SSID 带 MAC 后四位（如 `K2P_9981`），现固件已改为纯机型名。若要恢复 MAC 后缀，在 `trunk/user/shared/defaults.h` 的 `DEF_WLAN_*_SSID` 定义中加 `MAC` 拼接并同步 `rc.c` 的填充逻辑。
+
+## 支持的机型
+
+- 板级配置见 `trunk/configs/boards/`，编译模板见 `trunk/configs/templates/`，支持机型涵盖 K2P、NEWIFI3、MSG1500、JCG-Q20、CR660x、RM2100、MI-R3G/R4A 等数十款 MT7621 / MT76x8 设备。
+- 已内置在线编译工作流（`.github/workflows/`）：`K2P.yml`、`MI-MINI.yml`、`R2100.yml`、`RM2100.yml`，可 fork 后直接 Actions 在线编译。
+- 自定义增减插件：编辑对应机型的 `trunk/configs/templates/<机型>.config`，将 `CONFIG_FIRMWARE_INCLUDE_*` 开关改为 `y`/`n`。
+- ⚠️ 对 7612 无线芯片的支持已知有问题，含 7612 的机型（如 B70）无法正常工作。
+
+## 自定义菜单 / 内置插件
+
+固件在 Web 管理界面「自定义菜单」页提供大量插件开关。**默认编译模板以精简为主，多数插件默认关闭**，可按需在 `.config` 模板或在线 Workflow 中开启。已接入的插件（二级菜单）包括：
+
+组网 / 内网穿透
+
+- EasyTier（P2P 虚拟局域网，Rust 实现）
+- Tailscale（WireGuard 系零配置组网）
+- VNT 客户端 / VNT 服务端
+- NPC 内网穿透（nps 客户端）
+- WireGuard
+- 皎月连（NAT 穿透）
+- FRP（frpc / frps）
+- 动态域名（阿里云 DDNS + DNSPod，支持记录自动创建）
+
+网络工具 / 应用
+
+- Alist（网盘聚合）
+- 巴法云（IoT / MQTT）
+- VirtualHere（USB 共享）
+- V2RayA（代理）
+- Caddy、Cloudflared、阿里云盘 WebDAV、网易云解锁、UU 加速器、Lucky、微信推送
+
+其他
+
+- Shadowsocks、adbyby 广告屏蔽、pdnsd DNS 加速、MentoHust 校园网认证、TTYD 终端等
+
+## 移除 WireGuard 内核模块（可选）
+
+不需要 WireGuard 的，去 `trunk/configs/boards/<机型>/kernel-3.4.x.config` 把 `CONFIG_WIREGUARD=y` 改为 `# CONFIG_WIREGUARD is not set`，可省约 900KB+ 内核体积。
+
+## 个性化
+
+修改背景图：刷机后在 `/etc/storage/` 新建 `bg` 文件夹，放入 `wood.jpg` 即可，路径为 `/etc/storage/bg/wood.jpg`。
+
+修改 LOGO：替换 `trunk/user/www/n56u_ribbon_fixed/bootstrap/img/asus_logo.png`（像素 150×70）。
+
+修改默认管理地址 / WiFi 名称 / 账号密码：见 `trunk/user/shared/defaults.h`。
+
+修改 `/tmp` 分区大小（默认 100M）：`trunk/user/scripts/dev_init.sh` 中的 `size_tmp="100M"`。
+
+修改 `/etc/storage` 分区大小（以 NEWIFI3 d2 32M 闪存为例）：
+
+1. `trunk/configs/boards/<机型>/kernel-3.4.x.config` 中 `CONFIG_MTD_STORE_PART_SIZ=0x200000`
+2. `trunk/user/scripts/dev_init.sh` 中 `size_etc="6M"`
+3. `trunk/user/scripts/mtd_storage.sh` 中 `mtd_part_size=65536`
+
+计算方式：先确认闪存大小，减去编译后固件大小得到可用空间。如 32M 闪存、固件 18M，则可用 14M = 14680064 字节，十六进制为 `0xe00000`。将 `CONFIG_MTD_STORE_PART_SIZ` 改为 `0xe00000`、`size_etc` 改为 `14M`、`mtd_part_size` 改为 `14680064`。**切记 storage 分区 + 固件大小必须小于闪存总大小，不能超过！**
+
+## 编译
+
+本地编译方法同其他 Padavan 源码（需先构建 toolchain）。推荐使用 `.github/workflows/` 下的在线工作流，fork 仓库后在 Actions 中选择机型即可编译，无需本地环境。
