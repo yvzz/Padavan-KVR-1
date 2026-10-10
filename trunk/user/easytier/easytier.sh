@@ -79,10 +79,11 @@ et_single_check() {
 	return 0
 }
 
-# 选二进制目录: 优先 /etc/storage/bin (flash, 不占内存), 空间不足回退 /tmp/var.
-# /tmp 是 tmpfs, 放进去的二进制等于常驻内存(core 约 7M), 而且重启后必清空要重下
+# 选二进制目录: 默认 /tmp/easytier/ (tmpfs, 重启即丢失但目录专属于本插件, 不会与其他插件
+# 的 /tmp/var/ 冲突). 阈值 20M 保留为启动 sanity check (K2P /tmp 约 30M, core 约 7M, 留够
+# 余量给 zip 解压时的临时文件).
 et_pick_bin_dir() {
-	for _cand in /etc/storage/bin /tmp/var ; do
+	for _cand in /tmp/easytier ; do
 		mkdir -p "$_cand" 2>/dev/null
 		[ -d "$_cand" ] || continue
 		_avail=$(df -k "$_cand" 2>/dev/null | awk 'NR==2{print $4}')
@@ -91,7 +92,7 @@ et_pick_bin_dir() {
 		echo "$_cand"
 		return 0
 	done
-	echo "/tmp/var"
+	echo "/tmp/easytier"
 }
 
 # 启动/重启互斥锁: 页面应用、autostart、watchdog 守护、失败重试都可能同时触发 start,
@@ -454,12 +455,19 @@ et_rules() {
 start_core() {
 	[ "$et_enable" = "0" ] && return 1
 	logg "正在启动easytier-core"
-  	if [ -z "$et_core" ] || [ "${et_core#/tmp/}" != "$et_core" ] ; then
-		# 为空, 或仍是旧的 /tmp 默认路径(重启即丢失、常驻内存) -> 重选, 优先 flash
-		et_core="$(et_pick_bin_dir)/easytier-core"
+  	if [ -z "$et_core" ] || [ "${et_core#/tmp/easytier/}" != "$et_core" ] ; then
+		# 为空, 或仍是旧路径 (/tmp/var/... 或 /etc/storage/bin/...) -> 切到新默认 /tmp/easytier/
+		_new_bin="$(et_pick_bin_dir)/easytier-core"
+		# 旧路径有现成二进制则直接搬过来, 省一次下载
+		if [ -n "$et_core" ] && [ -f "$et_core" ] && [ "$et_core" != "$_new_bin" ] ; then
+			mkdir -p "$(dirname "$_new_bin")" 2>/dev/null
+			mv -f "$et_core" "$_new_bin" 2>/dev/null && \
+				logg "已将 $et_core 迁移到 $_new_bin"
+		fi
+		# 清理 /tmp/var/ 下的旧副本(可能 nvram 已空但磁盘还在)
+		rm -f /tmp/var/easytier-core /tmp/var/easytier-cli 2>/dev/null
+		et_core="$_new_bin"
   		nvram set easytier_bin=$et_core
-		# 迁到 flash 后清掉 /tmp 里的旧副本, 否则省内存的目的就落空了
-		[ "${et_core#/tmp/}" = "$et_core" ] && rm -f /tmp/var/easytier-core /tmp/var/easytier-cli 2>/dev/null
     	fi
 	# 兜底重试: 先把守护条目写入 _opt_script_check, 再走下载/启动.
 	# 这样即使重启后下载失败、进程起不来, watchdog 也会每 80 秒重新 start 一次(含重下),
@@ -566,11 +574,17 @@ start_core() {
 start_web() {
 	[ "$et_web_enable" = "0" ] && return 1
 	logg "正在启动easytier-web"
-  	if [ -z "$et_web_bin" ] || [ "${et_web_bin#/tmp/}" != "$et_web_bin" ] ; then
-		# 同上: 为空或仍是旧的 /tmp 路径时重选, 优先 flash
-		et_web_bin="$(et_pick_bin_dir)/easytier-web"
+  	if [ -z "$et_web_bin" ] || [ "${et_web_bin#/tmp/easytier/}" != "$et_web_bin" ] ; then
+		# 同上: 为空或仍是旧路径时切到新默认 /tmp/easytier/
+		_new_bin="$(et_pick_bin_dir)/easytier-web"
+		if [ -n "$et_web_bin" ] && [ -f "$et_web_bin" ] && [ "$et_web_bin" != "$_new_bin" ] ; then
+			mkdir -p "$(dirname "$_new_bin")" 2>/dev/null
+			mv -f "$et_web_bin" "$_new_bin" 2>/dev/null && \
+				logg "已将 $et_web_bin 迁移到 $_new_bin"
+		fi
+		rm -f /tmp/var/easytier-web 2>/dev/null
+		et_web_bin="$_new_bin"
   		nvram set easytier_web_bin=$et_web_bin
-		[ "${et_web_bin#/tmp/}" = "$et_web_bin" ] && rm -f /tmp/var/easytier-web 2>/dev/null
     	fi
 	# 兜底重试: 与 start_core 同理, 先写守护条目, 下载失败也能被 watchdog 每 80 秒重试拉起
 	web_keep
