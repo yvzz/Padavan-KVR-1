@@ -149,6 +149,19 @@ dl_lock_try() {
 dl_lock_release() {
 	rm -rf "$dl_lock" 2>/dev/null
 }
+# 读取持锁实例写入的下载进度(由 et_dl_timeout 每 5 秒更新到 $dl_lock/prog),
+# 供并发实例在"已有实例正在下载, 本次跳过"时把进度显示出来,
+# 否则日志是静默的, 分不清"正在正常下载"还是"已卡死".
+et_dl_progress() {
+	_prog="$(cat "$dl_lock/prog" 2>/dev/null)"
+	[ -n "$_prog" ] || return 0
+	_el=""
+	if [ -f "$dl_lock/ts" ] ; then
+		_ts=$(cat "$dl_lock/ts" 2>/dev/null)
+		[ -n "$_ts" ] && _el="已耗时 $(( $(date +%s) - _ts ))s"
+	fi
+	echo " 进度[${_prog}]${_el:+ $_el}"
+}
 
 et_restart () {
 relock="/var/lock/easytier_restart.lock"
@@ -220,9 +233,33 @@ et_dl_timeout() {
 	fi
 	_dl_pid=$!
 	_dl_wait=0
+	_dl_last=0
+	_dl_stall=0
 	while [ $_dl_wait -lt $_dl_timeout ] ; do
 		# 下载进程已退出: 无论成功失败都立即返回
 		kill -0 "$_dl_pid" 2>/dev/null || break
+		# 每 5 秒报一次进度: 日志里能看到下载在推进还是卡死(大小长时间不变 = 卡死),
+		# 并把进度写进锁目录, 供并发实例("已有实例正在下载, 本次跳过")读出来显示
+		if [ $((_dl_wait % 5)) -eq 0 ] && [ $_dl_wait -gt 0 ] ; then
+			_dl_now=$(stat -c %s "$_dl_out" 2>/dev/null)
+			[ -n "$_dl_now" ] || _dl_now=0
+			_dl_kb=$((_dl_now / 1024))
+			_dl_sp=$(( (_dl_now - _dl_last) / 5 / 1024 ))
+			[ "$_dl_now" -le "$_dl_last" ] && _dl_stall=$((_dl_stall + 5)) || _dl_stall=0
+			# 阈值取 30 秒而非更短: 代理源(如 ghproxy)是"先去 GitHub 拉取再转发",
+			# 准备期常常十几到二十几秒完全没有数据, 判太短会把正常等待误杀成卡死.
+			# 总时长仍由 $_dl_timeout(60s)硬兜底, 这里只是提前止损省掉空等.
+			if [ "$_dl_stall" -ge 30 ] ; then
+				logg "下载卡死(${_dl_stall}秒无进展, 停在 ${_dl_kb} KB), 强制中止换源"
+				kill -9 "$_dl_pid" 2>/dev/null
+				wait "$_dl_pid" 2>/dev/null
+				rm -f "$_dl_out"
+				return 1
+			fi
+			logg "下载中 ${_dl_wait}s: 已下载 ${_dl_kb} KB (${_dl_sp} KB/s)"
+			[ -d "$dl_lock" ] && echo "${_dl_kb}KB/${_dl_sp}KB per s/${_dl_wait}s" > "$dl_lock/prog" 2>/dev/null
+			_dl_last=$_dl_now
+		fi
 		sleep 1
 		_dl_wait=$((_dl_wait + 1))
 	done
@@ -558,7 +595,7 @@ start_core() {
  	if [ ! -f "$et_core" ] ; then
 		# 抢下载锁, 抢不到说明已有实例在下载, 直接退出等守护下次重试, 避免并发踩踏
 		if ! dl_lock_try ; then
-			logg "已有实例正在下载, 本次跳过"
+			logg "已有实例正在下载, 本次跳过$(et_dl_progress)"
 			return 1
 		fi
 		date +%s > "$dl_lock/ts"
@@ -679,7 +716,7 @@ start_web() {
  	if [ ! -f "$et_web_bin" ] ; then
 		# 抢下载锁, 避免与 core 下载或其他实例并发踩踏
 		if ! dl_lock_try ; then
-			logg "已有实例正在下载, 本次跳过"
+			logg "已有实例正在下载, 本次跳过$(et_dl_progress)"
 			return 1
 		fi
 		date +%s > "$dl_lock/ts"
