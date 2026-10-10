@@ -114,16 +114,9 @@ rm -f /var/run/easytier_ready
 fi
 
 if [ $(nvram get npc_enable) = 1 ] ; then
-if [ $(nvram get easytier_enable) = 1 ] || [ $(nvram get easytier_enable) = 2 ] || [ $(nvram get easytier_web_enable) = 1 ] ; then
-logger -t "自动启动" "正在启动NPC内网穿透(等待EasyTier下载/启动完成, 最多120秒)"
-# 先让 EasyTier 把二进制下完并启动, 避免两者同时往小 /tmp 塞文件把空间挤爆导致双双失败.
-# EasyTier 启动流程一结束(成功或跳过)就会写 /var/run/easytier_ready, 这里立即启动 NPC;
-# 若 120 秒内仍无标记(极端情况下载卡死), 也强制启动, 不让 NPC 一直挂着
-( _c=0; while [ $_c -lt 120 ] && [ ! -f /var/run/easytier_ready ] ; do sleep 1; _c=$((_c+1)); done; /usr/bin/npc.sh start ) &
-else
 logger -t "自动启动" "正在启动NPC内网穿透"
+# NPC 启动时会自己等 EasyTier 完成(最多 120 秒), 避免与 ET 同时下载把 /tmp 挤爆
 /usr/bin/npc.sh start &
-fi
 fi
 
 if [ $(nvram get wxsend_enable) = 1 ] || [ $(nvram get wxsend_enable) = 2 ] ; then
