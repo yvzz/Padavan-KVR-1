@@ -493,7 +493,7 @@ et_rules() {
 start_core() {
 	[ "$et_enable" = "0" ] && return 1
 	logg "正在启动easytier-core"
-  	if [ -z "$et_core" ] || [ "${et_core#/tmp/easytier/}" != "$et_core" ] ; then
+  	if [ -z "$et_core" ] || [ "${et_core#/tmp/easytier/}" = "$et_core" ] ; then
 		# 为空, 或仍是旧路径 (/tmp/var/... 或 /etc/storage/bin/...) -> 切到新默认 /tmp/easytier/
 		_new_bin="$(et_pick_bin_dir)/easytier-core"
 		# 旧路径有现成二进制则直接搬过来, 省一次下载
@@ -614,7 +614,7 @@ start_core() {
 start_web() {
 	[ "$et_web_enable" = "0" ] && return 1
 	logg "正在启动easytier-web"
-  	if [ -z "$et_web_bin" ] || [ "${et_web_bin#/tmp/easytier/}" != "$et_web_bin" ] ; then
+  	if [ -z "$et_web_bin" ] || [ "${et_web_bin#/tmp/easytier/}" = "$et_web_bin" ] ; then
 		# 同上: 为空或仍是旧路径时切到新默认 /tmp/easytier/
 		_new_bin="$(et_pick_bin_dir)/easytier-web"
 		if [ -n "$et_web_bin" ] && [ -f "$et_web_bin" ] && [ "$et_web_bin" != "$_new_bin" ] ; then
