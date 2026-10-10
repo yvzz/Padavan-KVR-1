@@ -275,27 +275,6 @@ npc_start()
 		logger -t "【NPC】" "已有 npc 操作在进行, 本次跳过(避免重复启动)"
 		return 1
 	fi
-	# 等待 EasyTier 启动完成(避免 EasyTier 与 NPC 的二进制同时往小 /tmp 里塞文件,
-	# 把 tmpfs 空间挤爆导致双双下载失败). 之前写在 autostart.sh 后台 while 循环里,
-	# 实际在路由器上不稳定(busybox ash 子 shell + ET dowload_et 期间 ready 标记未写),
-	# NPC 经常在 ET 下载完成前就开始下载 npc. 把等待放到 npc.sh 内部后, 不管谁调
-	# start(autostart / httpd / 手动 ssh), 都会在这里等 ET. ET 未开启则跳过等
-	_et_on=0
-	[ "$(nvram get easytier_enable)" = "1" ] && _et_on=1
-	[ "$(nvram get easytier_enable)" = "2" ] && _et_on=1
-	[ "$(nvram get easytier_web_enable)" = "1" ] && _et_on=1
-	if [ $_et_on = 1 ] ; then
-		_wait=0
-		while [ $_wait -lt 120 ] && [ ! -f /var/run/easytier_ready ] ; do
-			sleep 1
-			_wait=$((_wait + 1))
-		done
-		if [ -f /var/run/easytier_ready ] ; then
-			logger -t "【NPC】" "EasyTier 已就绪 (等了 ${_wait} 秒), 开始启动 NPC"
-		else
-			logger -t "【NPC】" "EasyTier 120 秒内未就绪, 强制启动 NPC"
-		fi
-	fi
 	npc_start_locked
 	_rc=$?
 	npc_lock_release

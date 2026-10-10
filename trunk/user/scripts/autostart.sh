@@ -115,7 +115,6 @@ fi
 
 if [ $(nvram get npc_enable) = 1 ] ; then
 logger -t "自动启动" "正在启动NPC内网穿透"
-# NPC 启动时会自己等 EasyTier 完成(最多 120 秒), 避免与 ET 同时下载把 /tmp 挤爆
 /usr/bin/npc.sh start &
 fi
 
